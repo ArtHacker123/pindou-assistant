@@ -1,0 +1,20 @@
+# Gradle
+.gradle/
+**/build/
+.kotlin/
+
+# Android local config (machine-specific)
+local.properties
+
+# IDE
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# OS
+.DS_Store
+
+# opencode tooling deps
+.opencode/node_modules/
