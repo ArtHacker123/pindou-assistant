@@ -55,24 +55,48 @@ fun PatternGrid(
     val density = LocalDensity.current
     val textCache = remember(project) { HashMap<String, TextLayoutResult>() }
 
+    var container by remember { mutableStateOf(IntSize.Zero) }
     var fitScale by remember { mutableFloatStateOf(1f) }
     var scale by remember { mutableFloatStateOf(0f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
-    var container by remember { mutableStateOf(IntSize.Zero) }
+    var refitKey by remember { mutableStateOf<Pair<Pair<Int, Int>, IntSize>?>(null) }
+
+    fun refit() {
+        val fit = minOf(
+            container.width.toFloat() / grid.width,
+            container.height.toFloat() / grid.height,
+        ) * 0.95f
+        fitScale = fit.coerceAtLeast(1f)
+        scale = fitScale
+        offset = Offset(
+            (container.width - grid.width * scale) / 2f,
+            (container.height - grid.height * scale) / 2f,
+        )
+    }
+
+    fun clampOffset() {
+        if (container.width <= 0 || container.height <= 0) return
+        val gw = grid.width * scale
+        val gh = grid.height * scale
+        val x = if (gw >= container.width) {
+            offset.x.coerceIn(container.width - gw, 0f)
+        } else {
+            (container.width - gw) / 2f
+        }
+        val y = if (gh >= container.height) {
+            offset.y.coerceIn(container.height - gh, 0f)
+        } else {
+            (container.height - gh) / 2f
+        }
+        offset = Offset(x, y)
+    }
 
     LaunchedEffect(container, grid.width, grid.height) {
-        if (container.width > 0 && container.height > 0) {
-            val fit = minOf(
-                container.width.toFloat() / grid.width,
-                container.height.toFloat() / grid.height,
-            ) * 0.95f
-            fitScale = fit.coerceAtLeast(1f)
-            scale = fitScale
-            offset = Offset(
-                (container.width - grid.width * scale) / 2f,
-                (container.height - grid.height * scale) / 2f,
-            )
-        }
+        if (container.width <= 0 || container.height <= 0) return@LaunchedEffect
+        val dims = grid.width to grid.height
+        val prev = refitKey
+        refitKey = dims to container
+        if (prev == null || prev.first != dims) refit() else clampOffset()
     }
 
     val minScale = fitScale * 0.6f
@@ -83,6 +107,7 @@ fun PatternGrid(
             .onSizeChanged { container = it }
             .pointerInput(grid.width, grid.height) {
                 detectTransformGestures { centroid, pan, zoom, _ ->
+                    if (scale <= 0f) return@detectTransformGestures
                     val newScale = (scale * zoom).coerceIn(minScale, maxScale)
                     val k = newScale / scale
                     offset = Offset(
@@ -90,6 +115,7 @@ fun PatternGrid(
                         centroid.y - (centroid.y - offset.y) * k,
                     ) + pan
                     scale = newScale
+                    clampOffset()
                 }
             }
             .pointerInput(grid.width, grid.height) {
