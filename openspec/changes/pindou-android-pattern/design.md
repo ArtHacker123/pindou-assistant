@@ -60,6 +60,20 @@ This change creates a new Android app from scratch (Kotlin + Jetpack Compose) un
 - **Rationale**: Matches stated requirements and common assembly conventions.
 - **Alternatives**: 0-based – less intuitive for users.
 
+### D9: Crop/Scale editor interaction model (as implemented)
+- **Choice** (fixed on-screen crop window): The crop `window` lives in **screen pixel coordinates** and stays put; the image is transformed underneath it by `scale` + `offset`. Window/image coordinates are decoupled; the image-coordinate crop rect is derived only at confirm via the inverse transform.
+  - *Because the window is screen-space, zooming never enlarges the crop frame* (a prior issue where the frame scaled with the image).
+- **Scale floor breaks at full-fit**: `scale` is clamped to `[fitScale, fitScale * 12]`. `fitScale` = `min(cw/iw, ch/ih) * 0.92` (centered). Zooming out toward the floor is allowed, but once `newScale <= fitScale` the view snaps to the canonical full-fit state (`scale = fitScale`, `offset = fitOffset`) — the image can never display smaller than full.
+- **Unified edge constraint (`clampImage`)** — one rule for all zoom levels, no full-view special case: for each axis, if the scaled image is **larger** than the viewport, clamp `offset` to `[container - imgSize, 0]` so the image edge stops exactly at the screen edge; if it is **smaller**, lock that axis to its centered position. At full-fit the image is smaller than (or equal to) the viewport on at least one axis, so it is naturally pinned centered → the full-view state is "locked" (no pan, no shrink) with zero extra branching.
+- **Window always on-screen and inside the picture (`clampedWindow`)**: the window is constrained to the **intersection of the on-screen image rect and the viewport** (image ∩ visible screen). Two consequences:
+  1. The crop frame can never be dragged into the off-screen part of a zoomed-in image (fix for "frame slides outside the 画面" when the image extends past the viewport).
+  2. The window size is capped by that region and never exceeds the visible picture.
+  - Float-robustness: `coerceIn(min, max)` throws on an empty range when float drift makes `a - (a - b) < b`; all clamp calls guard the upper bound with `maxOf(region.left, region.right - w)` (and the window edge orders with 1 px guards) so the range is never inverted.
+- **Gesture model** (`awaitEachGesture` on the canvas): single finger **inside** the window → `MOVE_CROP` (translate the window, then clamp); single finger **outside** → `PAN` (translate the image, then `clampImage` + `clampedWindow`); two+ fingers → `PINCH` (zoom anchored at the finger centroid, delta-driven: `newScale = scale * (curDist / prevDist)`, then `clampImage` + `clampedWindow`). Deltas come from `change.position - change.previousPosition` (guards against the removed `positionChange()` ambiguity of this Compose version).
+- **Corner handles** (`CornerHandle`): white L-shaped bracket, 44 dp touch target, vertex anchored at the window corner. Each handle consumes its pointer-down (`awaitFirstDown().consume()`) and drives its own per-event drag loop, so the parent canvas gesture never double-processes the same finger (fix for the handle "following behind / offset" bug). Resize clamps opposing edges with 1 px minimums before the shared `clampedWindow`.
+- **Confirm path**: `left/top = (window.min - offset) / scale`, `right/bottom = (window.max - offset) / scale`, each coerced into `[0, iw|ih]`, converted to ints with `coerceIn(0, bitmap.width-1)` / `coerceIn(1, bitmap.width)` (width/height ≥ 1), then `Bitmap.createBitmap` from the original — always in-bounds.
+- **Buttons**: only **重置** (reset to full-fit + full-window) and **确认** remain; the previous duplicate **全图** button was removed.
+
 ## Risks / Trade-offs
 
 - [Risk] K-means randomness can produce slightly different quantCenters across runs → **Mitigation**: Support optional deterministic `seed` (default derive from `sourceHash`).

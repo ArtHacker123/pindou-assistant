@@ -5,8 +5,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,12 +53,21 @@ import android.graphics.RectF
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-private const val MIN_CROP_PX = 8f
+/** Minimum crop-window edge, in screen px. */
+private const val MIN_WINDOW_PX = 32f
+/** Scale value tolerances: within this distance of fit the view is "full". */
+private const val FULL_VIEW_EPS = 0.001f
 
 private enum class Corner { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
 
 private enum class GestureMode { PAN, MOVE_CROP, PINCH }
 
+/**
+ * Crop screen. A fixed on-screen crop [window] stays put while the image
+ * (scale/offset) transforms underneath it. The image scale never drops below
+ * the full-fit level, and its translation is always edge-constrained so the
+ * full-fit state is naturally "locked" (smaller axes are auto-centered).
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CropScreen(controller: PindouController) {
@@ -71,22 +78,64 @@ fun CropScreen(controller: PindouController) {
     var container by remember { mutableStateOf(IntSize.Zero) }
     var scale by remember { mutableFloatStateOf(0f) }
     var fitScale by remember { mutableFloatStateOf(1f) }
+    var fitOffset by remember { mutableStateOf(Offset.Zero) }
     var offset by remember { mutableStateOf(Offset.Zero) }
-    var crop by remember { mutableStateOf(RectF(0f, 0f, iw, ih)) }
+    var window by remember { mutableStateOf(RectF(0f, 0f, iw, ih)) }
 
     fun resetView() {
         if (container.width <= 0 || container.height <= 0) return
         val fit = min(container.width / iw, container.height / ih) * 0.92f
         fitScale = fit.coerceAtLeast(0.01f)
-        scale = fitScale
-        offset = Offset(
+        fitOffset = Offset(
             (container.width - iw * fitScale) / 2f,
             (container.height - ih * fitScale) / 2f,
         )
-        crop = RectF(0f, 0f, iw, ih)
+        scale = fitScale
+        offset = fitOffset
+        window = RectF(fitOffset.x, fitOffset.y, fitOffset.x + iw * fitScale, fitOffset.y + ih * fitScale)
     }
 
     LaunchedEffect(container) { resetView() }
+
+    /** Constrains the image translation so it can never expose screen edges. */
+    fun clampImage() {
+        if (container.width <= 0 || container.height <= 0) return
+        val imgW = iw * scale
+        val imgH = ih * scale
+        val x = if (imgW >= container.width) {
+            offset.x.coerceIn(container.width - imgW, 0f)
+        } else {
+            (container.width - imgW) / 2f
+        }
+        val y = if (imgH >= container.height) {
+            offset.y.coerceIn(container.height - imgH, 0f)
+        } else {
+            (container.height - imgH) / 2f
+        }
+        offset = Offset(x, y)
+    }
+
+    fun clampedWindow() {
+        if (container.width <= 0 || container.height <= 0) return
+        val img = RectF(offset.x, offset.y, offset.x + iw * scale, offset.y + ih * scale)
+        if (img.width() <= 0f || img.height() <= 0f) return
+        // The crop window may only occupy the visible picture area:
+        // the intersection of the on-screen image rect and the viewport.
+        val region = RectF(
+            maxOf(img.left, 0f),
+            maxOf(img.top, 0f),
+            minOf(img.right, container.width.toFloat()),
+            minOf(img.bottom, container.height.toFloat()),
+        )
+        if (region.width() <= 0f || region.height() <= 0f) return
+        val minW = minOf(MIN_WINDOW_PX, region.width())
+        val minH = minOf(MIN_WINDOW_PX, region.height())
+        val w = maxOf(window.right - window.left, minW).coerceAtMost(region.width())
+        val h = maxOf(window.bottom - window.top, minH).coerceAtMost(region.height())
+        val l = window.left.coerceIn(region.left, maxOf(region.left, region.right - w))
+        val t = window.top.coerceIn(region.top, maxOf(region.top, region.bottom - h))
+        window = RectF(l, t, l + w, t + h)
+    }
 
     Scaffold(
         topBar = {
@@ -117,16 +166,11 @@ fun CropScreen(controller: PindouController) {
                         .onSizeChanged { container = it }
                         .pointerInput(Unit) {
                             awaitEachGesture {
-                                val firstDown = awaitFirstDown(requireUnconsumed = false)
-                                val startedInsideCrop = scale > 0f && run {
-                                    val img = Offset(
-                                        (firstDown.position.x - offset.x) / scale,
-                                        (firstDown.position.y - offset.y) / scale,
-                                    )
-                                    img.x in crop.left..crop.right && img.y in crop.top..crop.bottom
-                                }
-                                var mode = if (startedInsideCrop) GestureMode.MOVE_CROP else GestureMode.PAN
+                                val down = awaitFirstDown()
+                                val insideWindow = window.contains(down.position.x, down.position.y)
+                                var mode = if (insideWindow) GestureMode.MOVE_CROP else GestureMode.PAN
                                 var lastCentroid: Offset? = null
+                                var lastDist: Float? = null
 
                                 while (true) {
                                     val event = awaitPointerEvent()
@@ -134,36 +178,54 @@ fun CropScreen(controller: PindouController) {
                                     if (pressed.isEmpty()) break
 
                                     if (pressed.size >= 2) {
-                                        // Two fingers: pinch-zoom anchored at the finger centroid.
                                         mode = GestureMode.PINCH
-                                        val centroid =
-                                            pressed.fold(Offset.Zero) { acc, c -> acc + c.position } /
-                                            pressed.size.toFloat()
-                                        val zoom = event.calculateZoom()
-                                        val newScale = (scale * zoom).coerceIn(fitScale * 0.5f, fitScale * 12f)
-                                        val k = newScale / scale
-                                        val anchor = lastCentroid ?: centroid
-                                        offset = Offset(
-                                            centroid.x - (anchor.x - offset.x) * k,
-                                            centroid.y - (anchor.y - offset.y) * k,
-                                        )
-                                        scale = newScale
+                                        val p0 = pressed[0].position
+                                        val p1 = pressed[1].position
+                                        val dist = (p1 - p0).getDistance()
+                                        val centroid = (p0 + p1) / 2f
+                                        val prev = lastDist
+                                        if (prev != null && prev > 0f && dist > 0f) {
+                                            val newScale = (scale * (dist / prev)).coerceIn(fitScale, fitScale * 12f)
+                                            if (newScale <= fitScale + FULL_VIEW_EPS) {
+                                                // Reached the floor: snap back to the canonical full view.
+                                                scale = fitScale
+                                                offset = fitOffset
+                                            } else {
+                                                val k = newScale / scale
+                                                val anchor = lastCentroid ?: centroid
+                                                offset = Offset(
+                                                    centroid.x - (anchor.x - offset.x) * k,
+                                                    centroid.y - (anchor.y - offset.y) * k,
+                                                )
+                                                scale = newScale
+                                            }
+                                            clampImage()
+                                            clampedWindow()
+                                        }
+                                        lastDist = dist
                                         lastCentroid = centroid
                                         pressed.forEach { it.consume() }
                                     } else {
                                         lastCentroid = null
+                                        lastDist = null
                                         val change = pressed.first()
                                         val delta = change.position - change.previousPosition
                                         when (mode) {
-                                            GestureMode.MOVE_CROP -> {
-                                                val dx = delta.x / scale
-                                                val dy = delta.y / scale
-                                                val nl = (crop.left + dx).coerceIn(0f, iw - crop.width())
-                                                val nt = (crop.top + dy).coerceIn(0f, ih - crop.height())
-                                                crop = RectF(nl, nt, nl + crop.width(), nt + crop.height())
-                                            }
-                                            GestureMode.PAN -> offset += delta
                                             GestureMode.PINCH -> Unit
+                                            GestureMode.MOVE_CROP -> {
+                                                window = RectF(
+                                                    window.left + delta.x,
+                                                    window.top + delta.y,
+                                                    window.right + delta.x,
+                                                    window.bottom + delta.y,
+                                                )
+                                                clampedWindow()
+                                            }
+                                            GestureMode.PAN -> {
+                                                offset += delta
+                                                clampImage()
+                                                clampedWindow()
+                                            }
                                         }
                                         change.consume()
                                     }
@@ -178,45 +240,55 @@ fun CropScreen(controller: PindouController) {
                         dstSize = IntSize((iw * scale).roundToInt(), (ih * scale).roundToInt()),
                     )
 
-                    val sx0 = offset.x + crop.left * scale
-                    val sy0 = offset.y + crop.top * scale
-                    val sx1 = offset.x + crop.right * scale
-                    val sy1 = offset.y + crop.bottom * scale
+                    val win = window
                     val dim = Color(0x99000000)
-                    drawRect(dim, Offset.Zero, Size(size.width, sy0.coerceAtLeast(0f)))
-                    drawRect(dim, Offset(0f, sy1), Size(size.width, (size.height - sy1).coerceAtLeast(0f)))
-                    drawRect(dim, Offset(0f, sy0), Size(sx0.coerceAtLeast(0f), (sy1 - sy0).coerceAtLeast(0f)))
-                    drawRect(dim, Offset(sx1, sy0), Size((size.width - sx1).coerceAtLeast(0f), (sy1 - sy0).coerceAtLeast(0f)))
+                    drawRect(dim, Offset.Zero, Size(size.width, win.top.coerceAtLeast(0f)))
+                    drawRect(dim, Offset(0f, win.bottom), Size(size.width, (size.height - win.bottom).coerceAtLeast(0f)))
+                    drawRect(dim, Offset(0f, win.top), Size(win.left.coerceAtLeast(0f), (win.bottom - win.top).coerceAtLeast(0f)))
+                    drawRect(dim, Offset(win.right, win.top), Size((size.width - win.right).coerceAtLeast(0f), (win.bottom - win.top).coerceAtLeast(0f)))
                     drawRect(
                         color = Color.White,
-                        topLeft = Offset(sx0, sy0),
-                        size = Size((sx1 - sx0).coerceAtLeast(0f), (sy1 - sy0).coerceAtLeast(0f)),
+                        topLeft = Offset(win.left, win.top),
+                        size = Size((win.right - win.left).coerceAtLeast(0f), (win.bottom - win.top).coerceAtLeast(0f)),
                         style = Stroke(width = 2f),
                     )
                 }
 
-                fun sx(ix: Float) = offset.x + ix * scale
-                fun sy(iy: Float) = offset.y + iy * scale
-
-                CornerHandle(Corner.TOP_LEFT, sx(crop.left), sy(crop.top)) { dx, dy ->
-                    val nl = (crop.left + dx).coerceIn(0f, crop.right - MIN_CROP_PX)
-                    val nt = (crop.top + dy).coerceIn(0f, crop.bottom - MIN_CROP_PX)
-                    crop = RectF(nl, nt, crop.right, crop.bottom)
+                CornerHandle(Corner.TOP_LEFT, window.left, window.top) { dx, dy ->
+                    window = RectF(
+                        (window.left + dx).coerceAtMost(window.right - 1f),
+                        (window.top + dy).coerceAtMost(window.bottom - 1f),
+                        window.right,
+                        window.bottom,
+                    )
+                    clampedWindow()
                 }
-                CornerHandle(Corner.TOP_RIGHT, sx(crop.right), sy(crop.top)) { dx, dy ->
-                    val nr = (crop.right + dx).coerceIn(crop.left + MIN_CROP_PX, iw)
-                    val nt = (crop.top + dy).coerceIn(0f, crop.bottom - MIN_CROP_PX)
-                    crop = RectF(crop.left, nt, nr, crop.bottom)
+                CornerHandle(Corner.TOP_RIGHT, window.right, window.top) { dx, dy ->
+                    window = RectF(
+                        window.left,
+                        (window.top + dy).coerceAtMost(window.bottom - 1f),
+                        (window.right + dx).coerceAtLeast(window.left + 1f),
+                        window.bottom,
+                    )
+                    clampedWindow()
                 }
-                CornerHandle(Corner.BOTTOM_LEFT, sx(crop.left), sy(crop.bottom)) { dx, dy ->
-                    val nl = (crop.left + dx).coerceIn(0f, crop.right - MIN_CROP_PX)
-                    val nb = (crop.bottom + dy).coerceIn(crop.top + MIN_CROP_PX, ih)
-                    crop = RectF(nl, crop.top, crop.right, nb)
+                CornerHandle(Corner.BOTTOM_LEFT, window.left, window.bottom) { dx, dy ->
+                    window = RectF(
+                        (window.left + dx).coerceAtMost(window.right - 1f),
+                        window.top,
+                        window.right,
+                        (window.bottom + dy).coerceAtLeast(window.top + 1f),
+                    )
+                    clampedWindow()
                 }
-                CornerHandle(Corner.BOTTOM_RIGHT, sx(crop.right), sy(crop.bottom)) { dx, dy ->
-                    val nr = (crop.right + dx).coerceIn(crop.left + MIN_CROP_PX, iw)
-                    val nb = (crop.bottom + dy).coerceIn(crop.top + MIN_CROP_PX, ih)
-                    crop = RectF(crop.left, crop.top, nr, nb)
+                CornerHandle(Corner.BOTTOM_RIGHT, window.right, window.bottom) { dx, dy ->
+                    window = RectF(
+                        window.left,
+                        window.top,
+                        (window.right + dx).coerceAtLeast(window.left + 1f),
+                        (window.bottom + dy).coerceAtLeast(window.top + 1f),
+                    )
+                    clampedWindow()
                 }
             }
 
@@ -230,22 +302,24 @@ fun CropScreen(controller: PindouController) {
                     modifier = Modifier.weight(1f),
                     onClick = { resetView() },
                 ) { Text("重置") }
-                OutlinedButton(
-                    modifier = Modifier.weight(1f),
-                    onClick = { crop = RectF(0f, 0f, iw, ih) },
-                ) { Text("全图") }
                 Button(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
                     onClick = {
+                        val l = ((window.left - offset.x) / scale).coerceIn(0f, iw)
+                        val t = ((window.top - offset.y) / scale).coerceIn(0f, ih)
+                        val r = ((window.right - offset.x) / scale).coerceIn(0f, iw)
+                        val b = ((window.bottom - offset.y) / scale).coerceIn(0f, ih)
                         val rect = Rect(
-                            crop.left.toInt().coerceIn(0, bitmap.width - 1),
-                            crop.top.toInt().coerceIn(0, bitmap.height - 1),
-                            crop.right.toInt().coerceIn(1, bitmap.width),
-                            crop.bottom.toInt().coerceIn(1, bitmap.height),
+                            l.toInt().coerceIn(0, bitmap.width - 1),
+                            t.toInt().coerceIn(0, bitmap.height - 1),
+                            r.toInt().coerceIn(1, bitmap.width),
+                            b.toInt().coerceIn(1, bitmap.height),
                         )
-                        val w = (rect.right - rect.left).coerceAtLeast(1)
-                        val h = (rect.bottom - rect.top).coerceAtLeast(1)
-                        val cropped = Bitmap.createBitmap(bitmap, rect.left, rect.top, w, h)
+                        val left = minOf(rect.left, rect.right - 1)
+                        val top = minOf(rect.top, rect.bottom - 1)
+                        val w = (rect.right - left).coerceAtLeast(1)
+                        val h = (rect.bottom - top).coerceAtLeast(1)
+                        val cropped = Bitmap.createBitmap(bitmap, left, top, w, h)
                         controller.onCropConfirmed(cropped.toPixelImage())
                     },
                 ) { Text("确认") }
@@ -255,8 +329,8 @@ fun CropScreen(controller: PindouController) {
 }
 
 /**
- * A white L-shaped crop corner bracket. Its vertex sits exactly on the image
- * corner at (x, y); the canvas is sized as a touch target centered on it.
+ * A white L-shaped crop corner bracket with a center-aligned touch target.
+ * It consumes the pointer-down so the parent image transform never also reacts.
  */
 @Composable
 private fun CornerHandle(
@@ -281,9 +355,18 @@ private fun CornerHandle(
             }
             .size(touchSize)
             .pointerInput(Unit) {
-                detectDragGestures { change, drag ->
-                    change.consume()
-                    onDrag(drag.x, drag.y)
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    down.consume()
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id && it.pressed } ?: break
+                        val delta = change.position - change.previousPosition
+                        if (delta != Offset.Zero) {
+                            onDrag(delta.x, delta.y)
+                        }
+                        change.consume()
+                    }
                 }
             },
     ) {
