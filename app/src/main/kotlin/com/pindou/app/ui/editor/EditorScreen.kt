@@ -19,11 +19,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,33 +43,61 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pindou.app.PindouController
 import com.pindou.core.model.PindouProject
+import com.pindou.core.processor.ImageType
 
+private val GRID_SIZES = listOf(29, 52, 58, 78, 104, 116, 128)
+private val COLOR_COUNTS = listOf(4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128)
+private const val AUTO_COLOR_COUNT = 16
+
+/**
+ * The merged parameter + pattern screen: a collapsible parameter panel on top of
+ * the interactive Form 2 grid. Any parameter change regenerates the pattern in
+ * place via [PindouController].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorScreen(controller: PindouController) {
-    val project = controller.project ?: return
-    val grid = project.grid
-    val itemByCode = remember(project) { project.paletteSource.items.associateBy { it.code } }
-    val counts = remember(project) { grid.cells.groupingBy { it }.eachCount() }
+    val project = controller.project
+    val grid = project?.grid
 
     var selectedCode by remember(project) { mutableStateOf<String?>(null) }
     var selectedPos by remember(project) { mutableStateOf<Pair<Int, Int>?>(null) }
     var tableExpanded by remember { mutableStateOf(true) }
+    var paramsExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("交互图纸 ${grid.width}×${grid.height}") },
+                title = { Text(grid?.let { "生成图纸 ${it.width}×${it.height}" } ?: "生成图纸") },
                 navigationIcon = {
                     IconButton(onClick = { controller.goHome() }) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
-                    TextButton(onClick = { controller.goExport() }) { Text("导出") }
+                    TextButton(
+                        enabled = controller.workingImage != null,
+                        onClick = { paramsExpanded = !paramsExpanded },
+                        modifier = Modifier.background(
+                            if (paramsExpanded) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                            RoundedCornerShape(20.dp),
+                        ),
+                    ) {
+                        Text("设置")
+                        Icon(
+                            imageVector = if (paramsExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                            contentDescription = if (paramsExpanded) "收起设置" else "展开设置",
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    TextButton(
+                        enabled = project != null && !controller.busy,
+                        onClick = { controller.goExport() },
+                    ) { Text("导出") }
                 },
             )
         },
@@ -73,42 +107,174 @@ fun EditorScreen(controller: PindouController) {
                 .fillMaxSize()
                 .padding(padding),
         ) {
+            if (paramsExpanded && controller.workingImage != null) {
+                ParamsPanel(
+                    controller = controller,
+                    editable = controller.workingImage != null,
+                )
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .background(Color(0xFFEEEEEE)),
             ) {
-                PatternGrid(
-                    project = project,
-                    selectedCode = selectedCode,
-                    onCellTap = { row, col ->
-                        if (row in 0 until grid.height && col in 0 until grid.width) {
-                            selectedPos = row to col
-                            selectedCode = grid[row, col]
-                        } else {
-                            selectedPos = null
-                            selectedCode = null
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
+                if (project != null) {
+                    val g = project.grid
+                    PatternGrid(
+                        project = project,
+                        selectedCode = selectedCode,
+                        onCellTap = { row, col ->
+                            if (row in 0 until g.height && col in 0 until g.width) {
+                                selectedPos = row to col
+                                selectedCode = g[row, col]
+                            } else {
+                                selectedPos = null
+                                selectedCode = null
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            if (controller.busy) "生成中…" else "请选择参数生成图纸",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+
+                if (controller.busy) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0x00000000)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
             }
 
-            InfoBar(
-                selectedCode = selectedCode,
-                selectedPos = selectedPos,
-                name = selectedCode?.let { itemByCode[it]?.name },
-                sameColorCount = selectedCode?.let { counts[it] } ?: 0,
-            )
+            if (project != null) {
+                val itemByCode = remember(project) { project.paletteSource.items.associateBy { it.code } }
+                val counts = remember(project) { project.grid.cells.groupingBy { it }.eachCount() }
+                InfoBar(
+                    selectedCode = selectedCode,
+                    selectedPos = selectedPos,
+                    name = selectedCode?.let { itemByCode[it]?.name },
+                    sameColorCount = selectedCode?.let { counts[it] } ?: 0,
+                )
+                ColorTablePanel(
+                    project = project,
+                    selectedCode = selectedCode,
+                    expanded = tableExpanded,
+                    onToggle = { tableExpanded = !tableExpanded },
+                    onSelect = { selectedCode = it },
+                )
+            }
+        }
+    }
+}
 
-            ColorTablePanel(
-                project = project,
-                selectedCode = selectedCode,
-                expanded = tableExpanded,
-                onToggle = { tableExpanded = !tableExpanded },
-                onSelect = { selectedCode = it },
+@Composable
+private fun ParamsPanel(
+    controller: PindouController,
+    editable: Boolean,
+) {
+    Divider()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            FieldDropdown(
+                label = "图像类型",
+                selected = controller.imageType.displayName,
+                options = ImageType.values().map { it.displayName },
+                enabled = editable,
+                modifier = Modifier.weight(1f),
+                onSelect = { controller.updateImageType(ImageType.values()[it]) },
             )
+            FieldDropdown(
+                label = "拼豆色板",
+                selected = controller.paletteMetas
+                    .firstOrNull { it.name == controller.paletteName }
+                    ?.displayName ?: "请选择",
+                options = controller.paletteMetas.map { "${it.displayName}（${it.colorCount} 色）" },
+                enabled = editable,
+                modifier = Modifier.weight(1f),
+                onSelect = { controller.updatePalette(controller.paletteMetas[it].name) },
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            FieldDropdown(
+                label = "图纸尺寸",
+                selected = "${controller.gridWidth}×${controller.gridHeight}",
+                options = GRID_SIZES.map { "${it}×${it}" },
+                enabled = editable,
+                modifier = Modifier.weight(1f),
+                onSelect = { controller.updateGridSize(GRID_SIZES[it]) },
+            )
+            FieldDropdown(
+                label = "用色数量",
+                selected = if (controller.colorCountAuto) "自动" else controller.colorCountTarget.toString(),
+                options = listOf("自动") + COLOR_COUNTS.map { it.toString() },
+                enabled = editable,
+                modifier = Modifier.weight(1f),
+                onSelect = {
+                    val auto = it == 0
+                    val count = if (auto) AUTO_COLOR_COUNT else COLOR_COUNTS[it - 1]
+                    controller.updateColorCountSelection(auto, count)
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun FieldDropdown(
+    label: String,
+    selected: String,
+    options: List<String>,
+    enabled: Boolean,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var open by remember { mutableStateOf(false) }
+    Column(modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall)
+        Spacer(Modifier.height(2.dp))
+        OutlinedButton(
+            onClick = { open = true },
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                selected,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(2.dp))
+            Icon(Icons.Filled.ArrowDropDown, contentDescription = "下拉", modifier = Modifier.size(20.dp))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEachIndexed { index, option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onSelect(index)
+                        open = false
+                    },
+                )
+            }
         }
     }
 }

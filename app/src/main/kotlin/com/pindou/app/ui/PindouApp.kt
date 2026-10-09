@@ -34,7 +34,6 @@ fun PindouApp(pendingUri: MutableState<Uri?>) {
         when (controller.screen) {
             Screen.Home -> HomeScreen(controller)
             Screen.Crop -> CropScreen(controller)
-            Screen.Params -> ParameterScreen(controller)
             Screen.Editor -> EditorScreen(controller)
             Screen.Export -> ExportScreen(controller)
         }

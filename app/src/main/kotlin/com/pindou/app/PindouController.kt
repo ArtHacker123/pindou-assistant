@@ -24,7 +24,9 @@ import com.pindou.core.serialize.ProjectFormatException
 import com.pindou.core.serialize.ProjectSerializer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -36,7 +38,6 @@ import java.util.Locale
 sealed interface Screen {
     data object Home : Screen
     data object Crop : Screen
-    data object Params : Screen
     data object Editor : Screen
     data object Export : Screen
 }
@@ -70,13 +71,17 @@ class PindouController(private val context: Context) {
     var busy by mutableStateOf(false)
         private set
 
-    // Generation parameters (two-way bound by the parameter screen).
+    // Generation parameters (two-way bound by the merged parameter/pattern screen).
     var imageType by mutableStateOf(ImageType.CARTOON)
     var paletteName by mutableStateOf(paletteMetas.firstOrNull()?.name)
-    var colorCountTarget by mutableStateOf(32)
-    var gridWidth by mutableStateOf(48)
-    var gridHeight by mutableStateOf(48)
+    var colorCountAuto by mutableStateOf(true)
+    var colorCountTarget by mutableStateOf(16)
+    var gridWidth by mutableStateOf(58)
+    var gridHeight by mutableStateOf(58)
     var exportCellSize by mutableStateOf(64)
+
+    private var regenJob: Job? = null
+    private var genSeq = 0
 
     fun palette(): Palette? = paletteName?.let { palettes.load(it) }
 
@@ -100,13 +105,15 @@ class PindouController(private val context: Context) {
 
     fun onCropConfirmed(cropped: PixelImage) {
         workingImage = cropped
-        screen = Screen.Params
+        screen = Screen.Editor
+        runGenerate()
     }
 
     fun openProject(parsed: PindouProject) {
         project = parsed
         paletteName = parsed.meta.paletteName
         imageType = ImageType.fromId(parsed.meta.imageType)
+        colorCountAuto = false
         colorCountTarget = parsed.meta.colorCountTarget
         gridWidth = parsed.meta.gridWidth
         gridHeight = parsed.meta.gridHeight
@@ -125,7 +132,6 @@ class PindouController(private val context: Context) {
         }
     }
 
-    fun goParams() { screen = Screen.Params }
     fun goEditor() { if (project != null) screen = Screen.Editor }
     fun goExport() { if (project != null) screen = Screen.Export }
     fun goHome() { screen = Screen.Home }
@@ -134,11 +140,56 @@ class PindouController(private val context: Context) {
 
     // ---- Generation -------------------------------------------------------
 
+    fun updateImageType(type: ImageType) {
+        if (imageType != type) {
+            imageType = type
+            scheduleRegen()
+        }
+    }
+
+    fun updatePalette(name: String) {
+        if (paletteName != name) {
+            paletteName = name
+            scheduleRegen()
+        }
+    }
+
+    fun updateGridSize(size: Int) {
+        if (gridWidth != size || gridHeight != size) {
+            gridWidth = size
+            gridHeight = size
+            scheduleRegen()
+        }
+    }
+
+    fun updateColorCountSelection(isAuto: Boolean, count: Int) {
+        val changed = colorCountAuto != isAuto || colorCountTarget != count
+        colorCountAuto = isAuto
+        colorCountTarget = count
+        if (changed) scheduleRegen()
+    }
+
+    /** Debounced regeneration: coalesces rapid parameter changes. */
+    private fun scheduleRegen() {
+        if (workingImage == null) return
+        regenJob?.cancel()
+        regenJob = scope.launch {
+            delay(250)
+            runGenerate()
+        }
+    }
+
     fun generate() {
+        if (screen != Screen.Editor) screen = Screen.Editor
+        runGenerate()
+    }
+
+    private fun runGenerate() {
         val image = workingImage ?: return
         val palette = palette() ?: return
         busy = true
         errorMessage = null
+        val seq = ++genSeq
         scope.launch {
             try {
                 val result = withContext(Dispatchers.Default) {
@@ -157,13 +208,15 @@ class PindouController(private val context: Context) {
                         ),
                     )
                 }
-                project = result
-                screen = Screen.Editor
+                if (seq == genSeq) {
+                    project = result
+                    screen = Screen.Editor
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "generate failed", e)
-                errorMessage = e.message ?: "生成失败"
+                if (seq == genSeq) errorMessage = e.message ?: "生成失败"
             } finally {
-                busy = false
+                if (seq == genSeq) busy = false
             }
         }
     }
