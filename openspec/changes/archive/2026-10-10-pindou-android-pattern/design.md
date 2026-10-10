@@ -96,6 +96,14 @@ This change creates a new Android app from scratch (Kotlin + Jetpack Compose) un
 - **Alternatives not taken**: (a) white padding — pollutes the quantization color centers and wastes a bead slot; (b) trimming the grid to valid content — breaks the square, uniform grid the user asked for.
 - **Interactions**: tapping an empty hole is a no-op (does not select, does not clear); counts filter out `null`; the exact-cell marker only draws on valid cells.
 
+### D13: Replace placeholder palette with MARD standard 221 (as implemented)
+- **Decision**: replace the synthetic placeholder `generic_221` (codes `C1..C221`: a generated gray ramp + 40 synthetic hue groups) with the real **MARD standard 221-color** table, bundled as `app/src/main/assets/palettes/mard_221.json` (displayName "MARD 标准 221 色"); `generic_221.json` is deleted.
+- **Source / license**: `github.com/HansBug/pindou-color-data` (**MIT**), variant `mard-221-alfonse-doudou` (cross-checked against MARD tooling). 221 items = groups A26/B32/C29/D26/E24/F25/G21/H23/M15 (codes `A1..M15`). MARD is the de-facto "221" standard in the CN bead community; Hama official Midi is only ~92 colors, so "官方 221" was interpreted as MARD 221.
+- **Mapping**: `code`/rgb copied verbatim from source; `id` = 1..221 by file order; `name`/`brand` left empty (source has no Chinese names, keeping the InfoBar clean).
+- **Impact**: color codes change from `C*` to letter+number (`A1`, `H7`, `M15`); `NaturalOrder` already sorts these correctly. Old `.pindou` files whose meta `paletteName = "generic_221"` no longer resolve to a bundled palette (render falls back to white) — accepted, no migration shim.
+- **Guard**: `Mard221PaletteFileTest` decodes the bundled asset and asserts 221 unique codes, `id` = 1..221, RGB in range, and natural-order sorting.
+- **Alternatives not taken**: `mard-221-github` (same codes, 77 RGB values differ from the cross-checked set) and `artkal-m-221-official` (Artkal's own M221 wording).
+
 ## Risks / Trade-offs
 
 - [Risk] K-means randomness can produce slightly different quantCenters across runs → **Mitigation**: Support optional deterministic `seed` (default derive from `sourceHash`).
@@ -108,7 +116,7 @@ This change creates a new Android app from scratch (Kotlin + Jetpack Compose) un
 
 ## Open Questions
 
-- Initial bundled palette set: confirm exact “>=221 colors” source/format (code naming, brand) to include as `assets/palettes/hama_221.json`.
+- ~~Initial bundled palette set: confirm exact “>=221 colors” source/format (code naming, brand)~~ → **Resolved by D13**: bundled palette is the MARD standard 221 set (`mard_221.json`, codes `A1..M15`), sourced from the MIT-licensed pindou-color-data dataset.
 - Default colorCountTarget values shown on slider (proposed 8,16,32,64,96,128).
 - Export DPI/cellOutPx defaults and min/max bounds.
 - Whether to include optional seed toggle in UI (expose or just use sourceHash by default).
