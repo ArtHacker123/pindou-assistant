@@ -96,11 +96,10 @@ object Form1BitmapRenderer {
         fitPlan(project, Int.MAX_VALUE, Int.MAX_VALUE)
 
     private fun fitPlan(project: PindouProject, maxWidthPx: Int, maxHeightPx: Int): ExportPlan {
-        val cell = Form1LayoutCalculator.largestFitCell(MAX_CELL_PX, maxWidthPx, maxHeightPx) { c ->
+        val cell = Form1LayoutCalculator.largestFitCell(MAX_CELL_PX) { c ->
             val layout = Form1LayoutCalculator.compute(metricsFor(project, c, paintsFor(c)))
-            val tooBig = Form1LayoutCalculator.exceedsLimit(layout) ||
-                layout.canvasWidth > maxWidthPx || layout.canvasHeight > maxHeightPx
-            if (tooBig) Int.MAX_VALUE to Int.MAX_VALUE else layout.canvasWidth to layout.canvasHeight
+            !Form1LayoutCalculator.exceedsLimit(layout) &&
+                layout.canvasWidth <= maxWidthPx && layout.canvasHeight <= maxHeightPx
         }
         val layout = Form1LayoutCalculator.compute(metricsFor(project, cell, paintsFor(cell)))
         return ExportPlan(cell, layout.canvasWidth, layout.canvasHeight)

@@ -68,21 +68,15 @@ object Form1LayoutCalculator {
     fun exceedsLimit(layout: Form1Layout): Boolean = layout.totalPixels > MAX_EXPORT_PIXELS
 
     /**
-     * Largest cell size in 1..maxCell whose measured canvas fits both page limits.
-     * Assumes [sizeAt] is monotone non-decreasing in both dimensions.
+     * Largest cell size in 1..maxCell for which [fits] holds.
+     * Assumes [fits] is monotone non-increasing in cell size (bigger cell → still fits or stops fitting).
      */
-    fun largestFitCell(
-        maxCell: Int,
-        maxCanvasWidth: Int,
-        maxCanvasHeight: Int,
-        sizeAt: (Int) -> Pair<Int, Int>,
-    ): Int {
+    fun largestFitCell(maxCell: Int, fits: (Int) -> Boolean): Int {
         var lo = 1
         var hi = maxOf(1, maxCell)
         while (lo < hi) {
             val mid = (lo + hi + 1) / 2
-            val (w, h) = sizeAt(mid)
-            if (w <= maxCanvasWidth && h <= maxCanvasHeight) lo = mid else hi = mid - 1
+            if (fits(mid)) lo = mid else hi = mid - 1
         }
         return lo
     }

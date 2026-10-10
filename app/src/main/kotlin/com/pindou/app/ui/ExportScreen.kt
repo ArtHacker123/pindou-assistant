@@ -1,6 +1,11 @@
 package com.pindou.app.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,11 +31,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +54,26 @@ import kotlinx.coroutines.withContext
 fun ExportScreen(controller: PindouController) {
     val project = controller.project ?: return
     val previewCell = 18
+
+    val appContext = LocalContext.current.applicationContext
+    var pendingSave by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) pendingSave?.invoke()
+        else controller.showError("需要「存储」权限才能保存到相册/文档")
+        pendingSave = null
+    }
+    fun saveWithLegacyPermission(action: () -> Unit) {
+        val ok = Build.VERSION.SDK_INT >= 29 ||
+            appContext.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+            PackageManager.PERMISSION_GRANTED
+        if (ok) action()
+        else {
+            pendingSave = action
+            permissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+    }
 
     val preview by produceState<Bitmap?>(initialValue = null, project, controller.exportSize, previewCell) {
         value = withContext(Dispatchers.Default) { controller.renderForm1(previewCell) }
@@ -123,7 +152,7 @@ fun ExportScreen(controller: PindouController) {
                 Button(
                     modifier = Modifier.weight(1f),
                     enabled = !controller.busy,
-                    onClick = { controller.exportPng(share = false) },
+                    onClick = { saveWithLegacyPermission { controller.exportPng(share = false) } },
                 ) { Text("保存 PNG") }
                 OutlinedButton(
                     modifier = Modifier.weight(1f),
@@ -144,7 +173,7 @@ fun ExportScreen(controller: PindouController) {
                 Button(
                     modifier = Modifier.weight(1f),
                     enabled = !controller.busy,
-                    onClick = { controller.exportPindou(share = false) },
+                    onClick = { saveWithLegacyPermission { controller.exportPindou(share = false) } },
                 ) { Text("保存 .pindou") }
                 OutlinedButton(
                     modifier = Modifier.weight(1f),

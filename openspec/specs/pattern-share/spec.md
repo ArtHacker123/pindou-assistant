@@ -4,22 +4,26 @@
 TBD - created by archiving change pindou-android-pattern. Update Purpose after archive.
 ## Requirements
 ### Requirement: Export and share Form 1 as PNG
-The system SHALL export Form 1 as a high-resolution PNG file to device storage and SHALL allow sharing that PNG through the system share sheet via a content URI (FileProvider).
+The system SHALL save the exported Form 1 PNG to the system gallery (visible in the Photos app) and SHALL allow sharing that PNG through the system share sheet via a content URI (FileProvider). On Android 10+ (API 29+) saving SHALL use `MediaStore.Images` under `Pictures/PindouAssistant` with no storage permission; on older versions (API 24–28) it SHALL write to the public Pictures directory and request `WRITE_EXTERNAL_STORAGE`.
 
-#### Scenario: Export PNG
-- **WHEN** the user confirms PNG export
-- **THEN** the rendered Form 1 image is written to app-accessible storage and the user is notified of the file location
+#### Scenario: Save PNG to gallery (API 29+)
+- **WHEN** the user taps "保存 PNG"
+- **THEN** the rendered Form 1 image is inserted into `MediaStore.Images` (`Pictures/PindouAssistant`), appears in the system gallery, and the user is notified it was saved, with no runtime permission prompt
+
+#### Scenario: Save PNG on legacy Android (API < 29)
+- **WHEN** the user taps "保存 PNG" without storage permission on an older device
+- **THEN** the app requests `WRITE_EXTERNAL_STORAGE` and, once granted, writes the PNG to the public Pictures directory
 
 #### Scenario: Share PNG
 - **WHEN** the user shares the exported PNG
 - **THEN** the system share sheet opens with the image attached via a FileProvider content URI
 
 ### Requirement: Export and share .pindou project file
-The system SHALL serialize the current project (version, meta, bead palette source, paletteUsed, grid of colorCodes) to a `.pindou` JSON file and SHALL allow sharing that file via the system share sheet.
+The system SHALL serialize the current project (version, meta, bead palette source, paletteUsed, grid of colorCodes) to a `.pindou` JSON file, SHALL save it to a user-accessible Documents directory, and SHALL allow sharing that file via the system share sheet. On Android 10+ (API 29+) saving SHALL use `MediaStore.Files` under `Documents/PindouAssistant` (i.e. `/sdcard/Documents/`) with no storage permission; on older versions (API 24–28) it SHALL write to the public Documents directory and require `WRITE_EXTERNAL_STORAGE`.
 
-#### Scenario: Export .pindou
-- **WHEN** the user exports the project file
-- **THEN** a valid `.pindou` JSON file containing the full grid and palette data is written
+#### Scenario: Save .pindou to Documents
+- **WHEN** the user taps "保存 .pindou"
+- **THEN** the project is written under the public Documents directory (`Documents/PindouAssistant`) where file managers can find it, and the user is notified of the location
 
 #### Scenario: Share .pindou
 - **WHEN** the user shares the `.pindou` file

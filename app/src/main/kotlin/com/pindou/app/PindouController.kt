@@ -1,8 +1,11 @@
 package com.pindou.app
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,7 +32,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -84,6 +86,10 @@ class PindouController(private val context: Context) {
     private var genSeq = 0
 
     fun palette(): Palette? = paletteName?.let { palettes.load(it) }
+
+    fun showError(message: String) {
+        errorMessage = message
+    }
 
     // ---- Navigation -------------------------------------------------------
 
@@ -241,15 +247,27 @@ class PindouController(private val context: Context) {
 
     fun exportPng(share: Boolean) {
         val p = project ?: return
+        if (!share && !storagePermissionOk()) {
+            errorMessage = "需要「存储」权限才能保存到相册，请在系统设置中开启"
+            return
+        }
         busy = true
         errorMessage = null
         scope.launch {
             try {
-                val file = withContext(Dispatchers.Default) {
-                    val bitmap = Form1BitmapRenderer.render(p, resolvedExportCellSize(p))
-                    exportManager.savePng(bitmap, baseName(p))
+                if (share) {
+                    val file = withContext(Dispatchers.Default) {
+                        val bitmap = Form1BitmapRenderer.render(p, resolvedExportCellSize(p))
+                        exportManager.savePng(bitmap, baseName(p))
+                    }
+                    exportManager.share(file, ExportManager.MIME_PNG, "分享拼豆图纸")
+                } else {
+                    withContext(Dispatchers.Default) {
+                        val bitmap = Form1BitmapRenderer.render(p, resolvedExportCellSize(p))
+                        exportManager.savePngToGallery(bitmap, baseName(p))
+                    }
+                    statusMessage = "已保存到系统相册（Pictures/PindouAssistant）"
                 }
-                finishExport(file, ExportManager.MIME_PNG, share, "分享拼豆图纸")
             } catch (e: Exception) {
                 Log.w(TAG, "exportPng failed", e)
                 errorMessage = e.message ?: "导出失败"
@@ -261,14 +279,25 @@ class PindouController(private val context: Context) {
 
     fun exportPindou(share: Boolean) {
         val p = project ?: return
+        if (!share && !storagePermissionOk()) {
+            errorMessage = "需要「存储」权限才能保存到文档目录，请在系统设置中开启"
+            return
+        }
         busy = true
         errorMessage = null
         scope.launch {
             try {
-                val file = withContext(Dispatchers.IO) {
-                    exportManager.saveProject(p, baseName(p))
+                if (share) {
+                    val file = withContext(Dispatchers.IO) {
+                        exportManager.saveProject(p, baseName(p))
+                    }
+                    exportManager.share(file, ExportManager.MIME_PINDOU, "分享交互图纸")
+                } else {
+                    val uri = withContext(Dispatchers.IO) {
+                        exportManager.saveProjectToDocuments(p, baseName(p))
+                    }
+                    statusMessage = "已保存到 文档/PindouAssistant/${uri.lastPathSegment ?: ""}"
                 }
-                finishExport(file, ExportManager.MIME_PINDOU, share, "分享交互图纸")
             } catch (e: Exception) {
                 Log.w(TAG, "exportPindou failed", e)
                 errorMessage = e.message ?: "导出失败"
@@ -278,12 +307,10 @@ class PindouController(private val context: Context) {
         }
     }
 
-    private fun finishExport(file: File, mime: String, share: Boolean, title: String) {
-        if (share) {
-            exportManager.share(file, mime, title)
-        } else {
-            statusMessage = "已保存到 ${file.absolutePath}"
-        }
+    private fun storagePermissionOk(): Boolean {
+        if (Build.VERSION.SDK_INT >= 29) return true
+        return context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+            PackageManager.PERMISSION_GRANTED
     }
 
     private fun baseName(p: PindouProject): String {
