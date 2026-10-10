@@ -104,6 +104,35 @@ class PatternGeneratorTest {
     }
 
     @Test
+    fun `marks fully invalid cells as empty holes`() {
+        // Left half transparent, right half red.
+        val width = 4
+        val height = 2
+        val pixels = IntArray(width * height)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                pixels[y * width + x] = if (x < width / 2) 0x00000000 else 0xFFFF0000.toInt()
+            }
+        }
+        val generator = PatternGenerator(processors = noOpProcessors)
+        val project = generator.generate(
+            PixelImage(width, height, pixels),
+            GenerateConfig(
+                gridWidth = 2,
+                gridHeight = 1,
+                palette = TestPalettes.basic(),
+                colorCountTarget = 2,
+                imageType = ImageType.CARTOON,
+                seed = 1,
+                createdAt = 123L,
+            ),
+        )
+        assertEquals(null, project.grid[0, 0])
+        assertEquals("C3", project.grid[0, 1])
+        assertEquals(1, project.paletteUsed.size)
+    }
+
+    @Test
     fun `stores generation context in meta`() {
         val generator = PatternGenerator(processors = noOpProcessors)
         val project = generator.generate(

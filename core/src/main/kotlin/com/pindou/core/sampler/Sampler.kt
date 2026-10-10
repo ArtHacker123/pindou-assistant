@@ -18,11 +18,11 @@ class UniformSampler : Sampler {
         val total = image.size
         val step = maxOf(1, total / maxSamples)
         val result = ArrayList<Rgb>(minOf(total, maxSamples) + 1)
+        val w = image.width
         var i = 0
         while (i < total) {
-            val argb = image.pixels[i]
-            if (((argb ushr 24) and 0xFF) >= 8) {
-                result.add(Rgb.fromArgb(argb))
+            if (image.valid(i % w, i / w)) {
+                result.add(Rgb.fromArgb(image.pixels[i]))
             }
             i += step
         }

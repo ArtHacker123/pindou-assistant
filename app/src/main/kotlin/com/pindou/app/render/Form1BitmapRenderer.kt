@@ -22,6 +22,7 @@ object Form1BitmapRenderer {
     private const val PADDING = 10
     private const val GRID_LINE_COLOR = 0xFF444444.toInt()
     private const val TABLE_GAP = 20
+    private const val EMPTY_CELL_BG = 0xFFF5F5F5.toInt()
 
     fun render(project: PindouProject, cellOutPx: Int): Bitmap {
         val grid = project.grid
@@ -138,14 +139,21 @@ object Form1BitmapRenderer {
 
         for (row in 0 until grid.height) {
             for (col in 0 until grid.width) {
-                val rgb = itemByCode[grid[row, col]]?.rgb ?: Rgb(255, 255, 255)
+                val code = grid[row, col]
                 val left = layout.gridRect.left + col * cell
                 val top = layout.gridRect.top + row * cell
+                if (code == null) {
+                    fill.color = EMPTY_CELL_BG
+                    canvas.drawRect(left.toFloat(), top.toFloat(), (left + cell).toFloat(), (top + cell).toFloat(), fill)
+                    canvas.drawLine(left.toFloat(), top.toFloat(), (left + cell).toFloat(), (top + cell).toFloat(), line)
+                    canvas.drawLine((left + cell).toFloat(), top.toFloat(), left.toFloat(), (top + cell).toFloat(), line)
+                    continue
+                }
+                val rgb = itemByCode[code]?.rgb ?: Rgb(255, 255, 255)
                 fill.color = rgb.toArgb()
                 canvas.drawRect(left.toFloat(), top.toFloat(), (left + cell).toFloat(), (top + cell).toFloat(), fill)
 
                 if (cell >= 34) {
-                    val code = grid[row, col]
                     val cx = left + cell / 2f
                     val fm = codePaint.fontMetrics
                     val cy = top + cell / 2f - (fm.ascent + fm.descent) / 2f

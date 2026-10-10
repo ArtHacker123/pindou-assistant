@@ -22,6 +22,14 @@ class GridTest {
     }
 
     @Test
+    fun `null cells are holes and hidden from distinct codes`() {
+        val grid = Grid(2, 2, listOf("A", null, "A", "C"))
+        assertEquals(null, grid[0, 1])
+        assertEquals("A", grid[1, 0])
+        assertEquals(listOf("A", "C"), grid.distinctCodes())
+    }
+
+    @Test
     fun `rejects mismatched cell count`() {
         assertThrows(IllegalArgumentException::class.java) {
             Grid(width = 2, height = 2, cells = listOf("A", "B", "C"))

@@ -104,7 +104,7 @@ class PindouController(private val context: Context) {
     }
 
     fun onCropConfirmed(cropped: PixelImage) {
-        workingImage = cropped
+        workingImage = cropped.paddedToSquare()
         screen = Screen.Editor
         runGenerate()
     }

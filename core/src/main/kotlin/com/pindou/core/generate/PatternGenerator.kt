@@ -46,9 +46,13 @@ class PatternGenerator(
             .quantize(samples, k, QuantConfig(seed = config.seed))
         val beadForCenter = mapper.mapCenters(centers, config.palette)
 
-        val cells = ArrayList<String>(config.gridWidth * config.gridHeight)
+        val cells = ArrayList<String?>(config.gridWidth * config.gridHeight)
         for (row in 0 until config.gridHeight) {
             for (col in 0 until config.gridWidth) {
+                if (AreaColor.coverage(processed, config.gridWidth, config.gridHeight, row, col) < MIN_CELL_VALID) {
+                    cells.add(null)
+                    continue
+                }
                 val avg = AreaColor.average(processed, config.gridWidth, config.gridHeight, row, col)
                 val idx = NearestColor.indexOf(avg, centers, distance)
                 cells.add(if (idx >= 0) beadForCenter[idx].code else config.palette.items.first().code)
@@ -83,5 +87,8 @@ class PatternGenerator(
     companion object {
         const val MAX_GRID = 128
         const val MIN_GRID = 1
+
+        /** A cell becomes an empty hole when its source region is less than this fraction valid. */
+        const val MIN_CELL_VALID = 0.5f
     }
 }

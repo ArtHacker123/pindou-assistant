@@ -131,12 +131,14 @@ fun EditorScreen(controller: PindouController) {
                         onCellTap = { row, col ->
                             if (row in 0 until g.height && col in 0 until g.width) {
                                 val code = g[row, col]
-                                if (selectedCode != null && code == selectedCode) {
-                                    selectedPos = null
-                                    selectedCode = null
-                                } else {
-                                    selectedPos = row to col
-                                    selectedCode = code
+                                if (code != null) {
+                                    if (selectedCode != null && code == selectedCode) {
+                                        selectedPos = null
+                                        selectedCode = null
+                                    } else {
+                                        selectedPos = row to col
+                                        selectedCode = code
+                                    }
                                 }
                             } else {
                                 selectedPos = null
@@ -171,7 +173,7 @@ fun EditorScreen(controller: PindouController) {
 
             if (project != null) {
                 val itemByCode = remember(project) { project.paletteSource.items.associateBy { it.code } }
-                val counts = remember(project) { project.grid.cells.groupingBy { it }.eachCount() }
+                val counts = remember(project) { project.grid.cells.filterNotNull().groupingBy { it }.eachCount() }
                 InfoBar(
                     selectedCode = selectedCode,
                     selectedPos = selectedPos,

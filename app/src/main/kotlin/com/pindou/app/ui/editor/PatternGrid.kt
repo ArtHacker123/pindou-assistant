@@ -38,6 +38,8 @@ private const val HALF_GROUP = GROUP / 2
 private val GROUP_CHIP = Color(0xECFFFFFF)
 private val SPOTLIGHT_DIM = Color(0x8C000000)
 private val SELECT_ACCENT = Color(0xFFFFA000)
+private val EMPTY_CELL_BG = Color(0xFFF5F5F5)
+private val EMPTY_CELL_LINES = Color(0x59000000)
 
 /**
  * The Form 2 interactive canvas: a pan/zoom grid that draws only the visible
@@ -221,6 +223,19 @@ fun PatternGrid(
                 val code = grid[r, c]
                 val x = offset.x + c * cell
                 val y = offset.y + r * cell
+                if (code == null) {
+                    drawRect(
+                        color = EMPTY_CELL_BG,
+                        topLeft = Offset(x, y),
+                        size = Size(cell, cell),
+                    )
+                    if (cell >= 8f) {
+                        val hatch = max(1f, cell * 0.05f)
+                        drawLine(EMPTY_CELL_LINES, Offset(x, y), Offset(x + cell, y + cell), strokeWidth = hatch)
+                        drawLine(EMPTY_CELL_LINES, Offset(x + cell, y), Offset(x, y + cell), strokeWidth = hatch)
+                    }
+                    continue
+                }
                 drawRect(
                     color = Color(colorByCode[code] ?: 0xFFFFFFFF.toInt()),
                     topLeft = Offset(x, y),
@@ -363,7 +378,7 @@ fun PatternGrid(
         if (cell >= 24f) {
             for (r in r0 until r1) {
                 for (c in c0 until c1) {
-                    val code = grid[r, c]
+                    val code = grid[r, c] ?: continue
                     val textPx = cell * 0.32f
                     val key = "$code#${textPx.toInt()}"
                     val layout = textCache.getOrPut(key) {
