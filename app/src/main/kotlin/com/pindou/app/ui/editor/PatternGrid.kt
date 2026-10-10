@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -32,10 +33,16 @@ import kotlin.math.floor
 import kotlin.math.max
 
 private const val MAX_CELL_PX = 128f
+private const val GROUP = 10
+private val GROUP_CHIP = Color(0xECFFFFFF)
+private val SPOTLIGHT_DIM = Color(0x8C000000)
+private val SELECT_ACCENT = Color(0xFFFFA000)
 
 /**
  * The Form 2 interactive canvas: a pan/zoom grid that draws only the visible
- * cells (viewport culling) and outlines every cell matching [selectedCode].
+ * cells (viewport culling), with group guides every 10 cells. When
+ * [selectedCode] is set, cells of that code get an inset accent outline while
+ * cells of other codes get dimmed by a black spotlight veil.
  */
 @Composable
 fun PatternGrid(
@@ -216,13 +223,23 @@ fun PatternGrid(
                     topLeft = Offset(x, y),
                     size = Size(cell, cell),
                 )
-                if (selectedCode != null && code == selectedCode) {
-                    drawRect(
-                        color = Color.Black,
-                        topLeft = Offset(x, y),
-                        size = Size(cell, cell),
-                        style = Stroke(width = max(2f, cell * 0.09f)),
-                    )
+                if (selectedCode != null) {
+                    if (code != selectedCode) {
+                        drawRect(
+                            color = SPOTLIGHT_DIM,
+                            topLeft = Offset(x, y),
+                            size = Size(cell, cell),
+                        )
+                    } else {
+                        val inset = cell * 0.08f
+                        val stroke = (cell * 0.04f).coerceIn(1.5f, 3f)
+                        drawRect(
+                            color = SELECT_ACCENT,
+                            topLeft = Offset(x + inset, y + inset),
+                            size = Size(cell - inset * 2, cell - inset * 2),
+                            style = Stroke(width = stroke),
+                        )
+                    }
                 }
             }
         }
@@ -237,6 +254,78 @@ fun PatternGrid(
             for (r in r0..r1) {
                 val y = offset.y + r * cell
                 drawLine(lineColor, Offset(offset.x + c0 * cell, y), Offset(offset.x + c1 * cell, y), strokeWidth = stroke)
+            }
+        }
+
+        val groupColor = Color(0x99000000)
+        val groupStroke = max(2f, cell * 0.12f)
+        var g = ceil(c0 / GROUP.toFloat()).toInt() * GROUP
+        while (g <= c1) {
+            val x = offset.x + g * cell
+            drawLine(groupColor, Offset(x, offset.y + r0 * cell), Offset(x, offset.y + r1 * cell), strokeWidth = groupStroke)
+            g += GROUP
+        }
+        g = ceil(r0 / GROUP.toFloat()).toInt() * GROUP
+        while (g <= r1) {
+            val y = offset.y + g * cell
+            drawLine(groupColor, Offset(offset.x + c0 * cell, y), Offset(offset.x + c1 * cell, y), strokeWidth = groupStroke)
+            g += GROUP
+        }
+
+        if (cell >= 6f) {
+            val labelPx = (cell * 0.75f).coerceIn(14f, 32f)
+            val labelColor = Color(0xB3000000)
+            fun groupNumber(n: Int): TextLayoutResult {
+                val key = "G$n${labelPx.toInt()}"
+                return textCache.getOrPut(key) {
+                    textMeasurer.measure(
+                        text = AnnotatedString(n.toString()),
+                        style = TextStyle(
+                            color = labelColor,
+                            fontSize = with(density) { labelPx.toSp() },
+                            fontWeight = FontWeight.Bold,
+                        ),
+                    )
+                }
+            }
+            val pad = 3f
+            g = ceil(c0 / GROUP.toFloat()).toInt() * GROUP
+            while (g <= c1) {
+                if (g != 0) {
+                    val layout = groupNumber(g)
+                    val cx = offset.x + g * cell
+                    val ty = max(0f, offset.y - layout.size.height - 2f)
+                    drawRoundRect(
+                        color = GROUP_CHIP,
+                        topLeft = Offset(cx - layout.size.width / 2f - pad, ty - pad),
+                        size = Size(layout.size.width + pad * 2, layout.size.height + pad * 2),
+                        cornerRadius = CornerRadius(4f, 4f),
+                    )
+                    drawText(
+                        layout,
+                        topLeft = Offset(cx - layout.size.width / 2f, ty),
+                    )
+                }
+                g += GROUP
+            }
+            g = ceil(r0 / GROUP.toFloat()).toInt() * GROUP
+            while (g <= r1) {
+                if (g != 0) {
+                    val layout = groupNumber(g)
+                    val cy = offset.y + g * cell
+                    val tx = max(0f, offset.x - layout.size.width - 2f)
+                    drawRoundRect(
+                        color = GROUP_CHIP,
+                        topLeft = Offset(tx - pad, cy - layout.size.height / 2f - pad),
+                        size = Size(layout.size.width + pad * 2, layout.size.height + pad * 2),
+                        cornerRadius = CornerRadius(4f, 4f),
+                    )
+                    drawText(
+                        layout,
+                        topLeft = Offset(tx, cy - layout.size.height / 2f),
+                    )
+                }
+                g += GROUP
             }
         }
 

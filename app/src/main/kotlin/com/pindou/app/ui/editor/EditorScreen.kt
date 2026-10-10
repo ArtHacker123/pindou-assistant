@@ -129,8 +129,14 @@ fun EditorScreen(controller: PindouController) {
                         selectedCode = selectedCode,
                         onCellTap = { row, col ->
                             if (row in 0 until g.height && col in 0 until g.width) {
-                                selectedPos = row to col
-                                selectedCode = g[row, col]
+                                val code = g[row, col]
+                                if (selectedCode != null && code == selectedCode) {
+                                    selectedPos = null
+                                    selectedCode = null
+                                } else {
+                                    selectedPos = row to col
+                                    selectedCode = code
+                                }
                             } else {
                                 selectedPos = null
                                 selectedCode = null
@@ -297,7 +303,7 @@ private fun InfoBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (selectedCode == null) {
-            Text("点击格子查看色号与坐标", style = MaterialTheme.typography.bodyMedium)
+            Text("点击格子查看色号与坐标，点高亮格可取消选择", style = MaterialTheme.typography.bodyMedium)
         } else {
             val pos = selectedPos
             if (pos != null) {
