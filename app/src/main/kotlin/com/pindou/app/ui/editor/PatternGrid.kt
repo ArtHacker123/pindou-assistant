@@ -114,9 +114,6 @@ fun PatternGrid(
         if (prev == null || prev.first != dims) refit() else clampOffset()
     }
 
-    val minScale = fitScale * 0.6f
-    val maxScale = MAX_CELL_PX
-
     Canvas(
         modifier = modifier
             .onSizeChanged { container = it }
@@ -136,6 +133,9 @@ fun PatternGrid(
                             canceled = true
                             break
                         }
+
+                        val minScale = fitScale * 0.6f
+                        val maxScale = MAX_CELL_PX
 
                         val ch = event.changes
                         var panX = 0f

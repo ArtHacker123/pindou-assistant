@@ -114,6 +114,12 @@ This change creates a new Android app from scratch (Kotlin + Jetpack Compose) un
 - **Guard**: `ColorSpaceTest` (round-trip, black/white Lab anchors, linear-midtone ≈188, perceptual nearest pick) + new `AreaColorTest` linear-mix case; existing pipeline tests unchanged and green.
 - **Alternatives not taken**: HSV/HSL — repackages RGB but is not perceptually uniform, hue is circular, and black/white have undefined hue, so it is wrong tool for nearest-color/averaging. CIEDE2000 — more accurate than dE76 but heavier; kept as future option behind the same `ColorSpace` seam.
 
+### D15: Live zoom bounds in Form 2 pinch (as implemented)
+- **Problem**: on large grids (104/116/128) the pattern could not be zoomed back out to fit, while small grids (52) zoomed out "more" — inconsistent. Root cause (found via temporary `PindouZoom` logging): `minScale = fitScale * 0.6f` and `maxScale` were plain `val`s computed during composition and **captured once** by the `pointerInput(project)` gesture coroutine. That coroutine only restarts when the `project` reference changes (i.e. a new generation). On grid change the sequence was: recomposition with the new `project` while `fitScale` still held the *previous* grid's value → stale snapshot captured → `LaunchedEffect refit()` then updated `fitScale` but the gesture coroutine never restarted. Grid 52 captured `minScale=0.6` (fitScale was its initial `1f`) so it shrank far; grid 128 captured `minScale=13.33` (grid 52's fit) so zoom-out was hard-clamped above fit.
+- **Design**: compute `minScale`/`maxScale` **per pinch event** from live delegated reads (`fitScale` is a `mutableFloatStateOf`, so `fitScale * 0.6f` inside the event loop is always the current value), instead of capturing composition-time snapshots. Temporary instrumentation removed.
+- **Result**: every grid size floors at `0.6 × own fitScale` (fits the whole pattern, then allows a bit more), uniformly across 52/104/116/128.
+- **Known residual**: on a container-only resize (e.g. settings panel toggling) `fitScale` is not recomputed (only `clampOffset`), so the floor reflects the last full refit; currently benign (min is still below the new fit for practical panels), re-fix if a layout change ever outgrows it.
+
 ## Risks / Trade-offs
 
 - [Risk] K-means randomness can produce slightly different quantCenters across runs → **Mitigation**: Support optional deterministic `seed` (default derive from `sourceHash`).
