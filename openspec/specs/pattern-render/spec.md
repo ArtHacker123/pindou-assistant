@@ -27,7 +27,7 @@ The interactive view SHALL highlight every cell sharing the selected cell's bead
 - **THEN** all cells of that bead color are highlighted, same as tapping a cell
 
 ### Requirement: Group grid guides (Form 2)
-The interactive view SHALL overlay group guides on the grid: a thick separator line every 10 cells, a finer separator line every 5 cells (thicker and darker than the base grid line, thinner and lighter than the 10-cell line), and bold numbers (10, 20, ...) at each 10-cell boundary. The 5-cell guides SHALL be skipped where a 10-cell guide would overlap. Group numbers SHALL remain pinned to the screen edges while panning/zooming and SHALL be drawn on a white chip so they stay readable over any cell color.
+The interactive view SHALL overlay group guides on the grid: a thick separator line every 10 cells, a finer separator line every 5 cells (thicker and darker than the base grid line, thinner and lighter than the 10-cell line), and bold numbers (10, 20, ...) at each 10-cell boundary. The 5-cell guides SHALL be skipped where a 10-cell guide would overlap. Group numbers SHALL remain pinned to the screen edges while panning/zooming and SHALL be drawn on a white chip so they stay readable over any cell color. The two axes SHALL be color-coded so rows and columns stay distinguishable at any zoom: column numbers (top edge) use blue, row numbers (left edge) use red.
 
 #### Scenario: Group separators every 10 cells
 - **WHEN** any pattern is displayed in Form 2
@@ -36,6 +36,10 @@ The interactive view SHALL overlay group guides on the grid: a thick separator l
 #### Scenario: Finer separator every 5 cells
 - **WHEN** any pattern is displayed in Form 2
 - **THEN** a separator line with width and darkness between the base grid line and the 10-cell line appears every 5 cells, except where a 10-cell line is drawn
+
+#### Scenario: Axis color coding
+- **WHEN** the user zooms or pans so group numbers are visible
+- **THEN** column numbers pinned at the top edge are blue and row numbers pinned at the left edge are red, so rows and columns are distinguishable at any zoom
 
 #### Scenario: Group numbers pinned while panning
 - **WHEN** the user pans or zooms so a group boundary crosses the visible area
