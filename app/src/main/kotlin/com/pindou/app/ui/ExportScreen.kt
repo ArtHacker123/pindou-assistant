@@ -35,11 +35,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
+import com.pindou.app.ExportSize
 import com.pindou.app.PindouController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-private val CELL_SIZES = listOf(48, 64, 80, 96)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,7 +46,7 @@ fun ExportScreen(controller: PindouController) {
     val project = controller.project ?: return
     val previewCell = 18
 
-    val preview by produceState<Bitmap?>(initialValue = null, project, previewCell) {
+    val preview by produceState<Bitmap?>(initialValue = null, project, controller.exportSize, previewCell) {
         value = withContext(Dispatchers.Default) { controller.renderForm1(previewCell) }
     }
 
@@ -89,17 +88,33 @@ fun ExportScreen(controller: PindouController) {
             }
 
             Spacer(Modifier.height(16.dp))
-            Text("每格像素", style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.height(8.dp))
+            Text("输出分辨率", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            val plan = controller.resolvedExportPlan(project)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CELL_SIZES.forEach { size ->
+                ExportSize.values().forEach { size ->
                     FilterChip(
-                        selected = controller.exportCellSize == size,
-                        onClick = { controller.exportCellSize = size },
-                        label = { Text("$size px") },
+                        selected = controller.exportSize == size,
+                        onClick = { controller.exportSize = size },
+                        label = { Text(size.label) },
                     )
                 }
             }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                when (controller.exportSize) {
+                    ExportSize.A4 ->
+                        "A4@300DPI（10mm 边距）：${project.grid.width}×${project.grid.height} → ${plan.cellOutPx} px/格，" +
+                            "PNG≈${plan.canvasWidth}×${plan.canvasHeight}px，整页无缩放打印。"
+                    ExportSize.MAX ->
+                        "单图内存上限内最大：${project.grid.width}×${project.grid.height} → ${plan.cellOutPx} px/格，" +
+                            "PNG≈${plan.canvasWidth}×${plan.canvasHeight}px，适合大屏/大幅放大查看。"
+                    else ->
+                        "${controller.exportSize.label} 高清：${project.grid.width}×${project.grid.height} → " +
+                            "${plan.cellOutPx} px/格，PNG≈${plan.canvasWidth}×${plan.canvasHeight}px，适合屏幕放大对色。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
 
             Spacer(Modifier.height(24.dp))
             Text("可打印 PNG", style = MaterialTheme.typography.titleSmall)

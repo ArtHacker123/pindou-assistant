@@ -36,8 +36,12 @@ data class Form1Layout(
  * is offset from the top-left by the row-number gutter and column-number header.
  */
 object Form1LayoutCalculator {
-    /** Guard against allocating an unreasonably large bitmap. */
-    const val MAX_EXPORT_PIXELS: Long = 64_000_000L
+    /**
+     * Guard against allocating an unreasonably large bitmap.
+     * 24M px ≈ 96MB of ARGB_8888 memory, safely under Android's ~100MB
+     * hardware-canvas bitmap limit and typical app-heap caps.
+     */
+    const val MAX_EXPORT_PIXELS: Long = 24_000_000L
 
     fun compute(metrics: Form1Metrics): Form1Layout {
         val gridWpx = metrics.gridWidth * metrics.cellOutPx
@@ -62,4 +66,24 @@ object Form1LayoutCalculator {
     }
 
     fun exceedsLimit(layout: Form1Layout): Boolean = layout.totalPixels > MAX_EXPORT_PIXELS
+
+    /**
+     * Largest cell size in 1..maxCell whose measured canvas fits both page limits.
+     * Assumes [sizeAt] is monotone non-decreasing in both dimensions.
+     */
+    fun largestFitCell(
+        maxCell: Int,
+        maxCanvasWidth: Int,
+        maxCanvasHeight: Int,
+        sizeAt: (Int) -> Pair<Int, Int>,
+    ): Int {
+        var lo = 1
+        var hi = maxOf(1, maxCell)
+        while (lo < hi) {
+            val mid = (lo + hi + 1) / 2
+            val (w, h) = sizeAt(mid)
+            if (w <= maxCanvasWidth && h <= maxCanvasHeight) lo = mid else hi = mid - 1
+        }
+        return lo
+    }
 }

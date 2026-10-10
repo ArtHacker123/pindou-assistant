@@ -78,7 +78,7 @@ class PindouController(private val context: Context) {
     var colorCountTarget by mutableStateOf(16)
     var gridWidth by mutableStateOf(52)
     var gridHeight by mutableStateOf(52)
-    var exportCellSize by mutableStateOf(64)
+    var exportSize by mutableStateOf(ExportSize.A4)
 
     private var regenJob: Job? = null
     private var genSeq = 0
@@ -223,10 +223,21 @@ class PindouController(private val context: Context) {
 
     // ---- Export & share ---------------------------------------------------
 
-    fun renderForm1(cellSize: Int = exportCellSize): Bitmap? {
+    fun renderForm1(cellSize: Int? = null): Bitmap? {
         val p = project ?: return null
-        return Form1BitmapRenderer.render(p, cellSize)
+        return Form1BitmapRenderer.render(p, cellSize ?: resolvedExportCellSize(p))
     }
+
+    /** Resolves the chosen export size to px/cell and the resulting PNG dimensions. */
+    fun resolvedExportPlan(p: PindouProject): Form1BitmapRenderer.ExportPlan =
+        when (exportSize) {
+            ExportSize.A4 -> Form1BitmapRenderer.fitToA4(p)
+            ExportSize.P1080 -> Form1BitmapRenderer.fitToWidth(p, 1920)
+            ExportSize.UHD4K -> Form1BitmapRenderer.fitToWidth(p, 3840)
+            ExportSize.MAX -> Form1BitmapRenderer.fitMax(p)
+        }
+
+    fun resolvedExportCellSize(p: PindouProject): Int = resolvedExportPlan(p).cellOutPx
 
     fun exportPng(share: Boolean) {
         val p = project ?: return
@@ -235,7 +246,7 @@ class PindouController(private val context: Context) {
         scope.launch {
             try {
                 val file = withContext(Dispatchers.Default) {
-                    val bitmap = Form1BitmapRenderer.render(p, exportCellSize)
+                    val bitmap = Form1BitmapRenderer.render(p, resolvedExportCellSize(p))
                     exportManager.savePng(bitmap, baseName(p))
                 }
                 finishExport(file, ExportManager.MIME_PNG, share, "分享拼豆图纸")
@@ -279,4 +290,12 @@ class PindouController(private val context: Context) {
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         return "pindou_${p.grid.width}x${p.grid.height}_$stamp"
     }
+}
+
+/** Export size presets: A4 single-page auto-fit, a target output width, or the max the device can hold. */
+enum class ExportSize(val label: String) {
+    A4("A4 整页(自适应)"),
+    P1080("1080P"),
+    UHD4K("4K"),
+    MAX("最大尺寸"),
 }

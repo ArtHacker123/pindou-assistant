@@ -24,11 +24,89 @@ object Form1BitmapRenderer {
     private const val TABLE_GAP = 20
     private const val EMPTY_CELL_BG = 0xFFF5F5F5.toInt()
 
+    // Form 2 group-grid palette (matches PatternGrid.kt).
+    private const val BASE_LINE_COLOR = 0x55000000.toInt()
+    private const val MID_LINE_COLOR = 0x77000000.toInt()
+    private const val GROUP_LINE_COLOR = 0x99000000.toInt()
+    private const val GROUP_COL_COLOR = 0xFF1565C0.toInt()
+    private const val GROUP_ROW_COLOR = 0xFFC62828.toInt()
+
+    /** A4 single-page defaults: 300 DPI with 10mm margins on both axes. */
+    private const val A4_DPI = 300
+    private const val A4_MARGIN_MM = 10
+
+    /** 1..maxCell for the A4 auto-fit; the old UI cap was 96 px/cell. */
+    private const val MAX_CELL_PX = 96
+
+    /** A non-translated plan result: chosen px/cell and the projected PNG size. */
+    data class ExportPlan(
+        val cellOutPx: Int,
+        val canvasWidth: Int,
+        val canvasHeight: Int,
+    )
+
+    private class Form1Paints(
+        val codePaint: Paint,
+        val strokePaint: Paint,
+        val labelPaint: Paint,
+        val tablePaint: Paint,
+        val colGroupPaint: Paint,
+        val rowGroupPaint: Paint,
+    )
+
     fun render(project: PindouProject, cellOutPx: Int): Bitmap {
         val grid = project.grid
         val itemByCode = project.paletteSource.items.associateBy { it.code }
-        val used = project.paletteUsed
+        val paints = paintsFor(cellOutPx)
+        val metrics = metricsFor(project, cellOutPx, paints)
+        val layout = Form1LayoutCalculator.compute(metrics)
+        check(!Form1LayoutCalculator.exceedsLimit(layout)) {
+            "Export too large: ${layout.canvasWidth}x${layout.canvasHeight}"
+        }
 
+        val bitmap = Bitmap.createBitmap(layout.canvasWidth, layout.canvasHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(Color.WHITE)
+
+        drawColumnLabels(canvas, layout, grid.width, paints.labelPaint, paints.colGroupPaint)
+        drawRowLabels(canvas, layout, grid.height, paints.labelPaint, paints.rowGroupPaint)
+        drawGrid(canvas, layout, project, itemByCode, paints.codePaint, paints.strokePaint)
+        drawColorTable(canvas, layout, project, paints.tablePaint)
+
+        return bitmap
+    }
+
+    /**
+     * Largest px/cell so the rendered Form 1 fits one A4 page at [A4_DPI] with
+     * [A4_MARGIN_MM] margins (portrait: 210×297mm).
+     */
+    fun fitToA4(project: PindouProject): ExportPlan {
+        val mmToPx = A4_DPI / 25.4f
+        val maxW = ((210 - 2 * A4_MARGIN_MM) * mmToPx).toInt()
+        val maxH = ((297 - 2 * A4_MARGIN_MM) * mmToPx).toInt()
+        return fitPlan(project, maxW, maxH)
+    }
+
+    /** Largest px/cell whose PNG width stays at or below [maxWidthPx]. */
+    fun fitToWidth(project: PindouProject, maxWidthPx: Int): ExportPlan =
+        fitPlan(project, maxWidthPx, Int.MAX_VALUE)
+
+    /** Largest px/cell the device can safely allocate, bounded only by the pixel guard. */
+    fun fitMax(project: PindouProject): ExportPlan =
+        fitPlan(project, Int.MAX_VALUE, Int.MAX_VALUE)
+
+    private fun fitPlan(project: PindouProject, maxWidthPx: Int, maxHeightPx: Int): ExportPlan {
+        val cell = Form1LayoutCalculator.largestFitCell(MAX_CELL_PX, maxWidthPx, maxHeightPx) { c ->
+            val layout = Form1LayoutCalculator.compute(metricsFor(project, c, paintsFor(c)))
+            val tooBig = Form1LayoutCalculator.exceedsLimit(layout) ||
+                layout.canvasWidth > maxWidthPx || layout.canvasHeight > maxHeightPx
+            if (tooBig) Int.MAX_VALUE to Int.MAX_VALUE else layout.canvasWidth to layout.canvasHeight
+        }
+        val layout = Form1LayoutCalculator.compute(metricsFor(project, cell, paintsFor(cell)))
+        return ExportPlan(cell, layout.canvasWidth, layout.canvasHeight)
+    }
+
+    private fun paintsFor(cellOutPx: Int): Form1Paints {
         val codeTextSize = (cellOutPx * 0.32f).coerceAtLeast(9f)
         val labelTextSize = (cellOutPx * 0.34f).coerceAtLeast(11f)
         val tableTextSize = (cellOutPx * 0.30f).coerceAtLeast(12f)
@@ -55,7 +133,26 @@ object Form1BitmapRenderer {
             textSize = tableTextSize
             color = Color.BLACK
         }
+        val colGroupPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textAlign = Paint.Align.CENTER
+            textSize = labelTextSize
+            color = GROUP_COL_COLOR
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        val rowGroupPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textAlign = Paint.Align.CENTER
+            textSize = labelTextSize
+            color = GROUP_ROW_COLOR
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        return Form1Paints(codePaint, strokePaint, labelPaint, tablePaint, colGroupPaint, rowGroupPaint)
+    }
 
+    private fun metricsFor(project: PindouProject, cellOutPx: Int, paints: Form1Paints = paintsFor(cellOutPx)): Form1Metrics {
+        val grid = project.grid
+        val used = project.paletteUsed
+        val labelPaint = paints.labelPaint
+        val tablePaint = paints.tablePaint
         val labelMetrics = labelPaint.fontMetrics
         val colLabelHeight = (labelMetrics.descent - labelMetrics.ascent).toInt() + PADDING * 2
         val rowLabelWidth = maxRowLabelWidth(grid.height, labelPaint) + PADDING * 2
@@ -63,11 +160,11 @@ object Form1BitmapRenderer {
         val swatchSize = (cellOutPx * 0.55f).toInt().coerceAtLeast(16)
         val maxCodeWidth = used.maxOfOrNull { tablePaint.measureText(it.code) } ?: 0f
         val maxNameWidth = used.maxOfOrNull { item -> item.name?.let { tablePaint.measureText(it) } ?: 0f } ?: 0f
-        val tableTextBlock = maxCodeWidth + if (maxNameWidth > 0f) maxNameWidth + tableTextSize else 0f
-        val tableWidth = (swatchSize + tableTextSize + tableTextBlock).toInt() + PADDING * 4
+        val tableTextBlock = maxCodeWidth + if (maxNameWidth > 0f) maxNameWidth + tablePaint.textSize else 0f
+        val tableWidth = (swatchSize + tablePaint.textSize + tableTextBlock).toInt() + PADDING * 4
         val tableRowHeight = maxOf(swatchSize, (tablePaint.fontMetrics.descent - tablePaint.fontMetrics.ascent).toInt()) + PADDING * 2
 
-        val metrics = Form1Metrics(
+        return Form1Metrics(
             gridWidth = grid.width,
             gridHeight = grid.height,
             cellOutPx = cellOutPx,
@@ -79,21 +176,6 @@ object Form1BitmapRenderer {
             padding = PADDING,
             tableGap = TABLE_GAP,
         )
-        val layout = Form1LayoutCalculator.compute(metrics)
-        check(!Form1LayoutCalculator.exceedsLimit(layout)) {
-            "Export too large: ${layout.canvasWidth}x${layout.canvasHeight}"
-        }
-
-        val bitmap = Bitmap.createBitmap(layout.canvasWidth, layout.canvasHeight, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        canvas.drawColor(Color.WHITE)
-
-        drawColumnLabels(canvas, layout, grid.width, labelPaint)
-        drawRowLabels(canvas, layout, grid.height, labelPaint)
-        drawGrid(canvas, layout, project, itemByCode, codePaint, strokePaint)
-        drawColorTable(canvas, layout, project, swatchSize, tablePaint)
-
-        return bitmap
     }
 
     private fun maxRowLabelWidth(height: Int, paint: Paint): Int {
@@ -102,21 +184,43 @@ object Form1BitmapRenderer {
         return max.toInt()
     }
 
-    private fun drawColumnLabels(canvas: Canvas, layout: Form1Layout, gridWidth: Int, paint: Paint) {
+    private fun drawColumnLabels(
+        canvas: Canvas,
+        layout: Form1Layout,
+        gridWidth: Int,
+        paint: Paint,
+        groupPaint: Paint,
+    ) {
         val baseline = (layout.gridRect.top - PADDING).toFloat()
         for (col in 0 until gridWidth) {
             val x = (layout.gridRect.left + col * layout.cellSize + layout.cellSize / 2).toFloat()
-            canvas.drawText((col + 1).toString(), x, baseline, paint)
+            val label = (col + 1).toString()
+            if ((col + 1) % 10 == 0) {
+                canvas.drawText(label, x, baseline, groupPaint)
+            } else {
+                canvas.drawText(label, x, baseline, paint)
+            }
         }
     }
 
-    private fun drawRowLabels(canvas: Canvas, layout: Form1Layout, gridHeight: Int, paint: Paint) {
+    private fun drawRowLabels(
+        canvas: Canvas,
+        layout: Form1Layout,
+        gridHeight: Int,
+        paint: Paint,
+        groupPaint: Paint,
+    ) {
         val x = (layout.gridRect.left - PADDING).toFloat()
         val fm = paint.fontMetrics
         val centerOffset = -(fm.ascent + fm.descent) / 2f
         for (row in 0 until gridHeight) {
             val y = layout.gridRect.top + row * layout.cellSize + layout.cellSize / 2f + centerOffset
-            canvas.drawText((row + 1).toString(), x, y, paint)
+            val label = (row + 1).toString()
+            if ((row + 1) % 10 == 0) {
+                canvas.drawText(label, x, y, groupPaint)
+            } else {
+                canvas.drawText(label, x, y, paint)
+            }
         }
     }
 
@@ -130,10 +234,30 @@ object Form1BitmapRenderer {
     ) {
         val cell = layout.cellSize
         val fill = Paint(Paint.ANTI_ALIAS_FLAG)
-        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val diag = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = GRID_LINE_COLOR
             strokeWidth = 1f
             style = Paint.Style.STROKE
+        }
+        val base = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = BASE_LINE_COLOR
+            strokeWidth = maxOf(1f, cell * 0.03f)
+            style = Paint.Style.STROKE
+        }
+        val mid = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = MID_LINE_COLOR
+            strokeWidth = maxOf(1.5f, cell * 0.06f)
+            style = Paint.Style.STROKE
+        }
+        val group = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = GROUP_LINE_COLOR
+            strokeWidth = maxOf(2f, cell * 0.12f)
+            style = Paint.Style.STROKE
+        }
+        fun linePaint(index: Int): Paint = when {
+            index % 10 == 0 -> group
+            index % 5 == 0 -> mid
+            else -> base
         }
         val grid = project.grid
 
@@ -145,15 +269,15 @@ object Form1BitmapRenderer {
                 if (code == null) {
                     fill.color = EMPTY_CELL_BG
                     canvas.drawRect(left.toFloat(), top.toFloat(), (left + cell).toFloat(), (top + cell).toFloat(), fill)
-                    canvas.drawLine(left.toFloat(), top.toFloat(), (left + cell).toFloat(), (top + cell).toFloat(), line)
-                    canvas.drawLine((left + cell).toFloat(), top.toFloat(), left.toFloat(), (top + cell).toFloat(), line)
+                    canvas.drawLine(left.toFloat(), top.toFloat(), (left + cell).toFloat(), (top + cell).toFloat(), diag)
+                    canvas.drawLine((left + cell).toFloat(), top.toFloat(), left.toFloat(), (top + cell).toFloat(), diag)
                     continue
                 }
                 val rgb = itemByCode[code]?.rgb ?: Rgb(255, 255, 255)
                 fill.color = rgb.toArgb()
                 canvas.drawRect(left.toFloat(), top.toFloat(), (left + cell).toFloat(), (top + cell).toFloat(), fill)
 
-                if (cell >= 34) {
+                if (cell >= 24) {
                     val cx = left + cell / 2f
                     val fm = codePaint.fontMetrics
                     val cy = top + cell / 2f - (fm.ascent + fm.descent) / 2f
@@ -166,14 +290,14 @@ object Form1BitmapRenderer {
             }
         }
 
-        // Outer border plus per-cell lines.
+        // Outer border plus per-cell lines, with 5/10 group lines like Form 2.
         for (col in 0..grid.width) {
             val x = (layout.gridRect.left + col * cell).toFloat()
-            canvas.drawLine(x, layout.gridRect.top.toFloat(), x, layout.gridRect.bottom.toFloat(), line)
+            canvas.drawLine(x, layout.gridRect.top.toFloat(), x, layout.gridRect.bottom.toFloat(), linePaint(col))
         }
         for (row in 0..grid.height) {
             val y = (layout.gridRect.top + row * cell).toFloat()
-            canvas.drawLine(layout.gridRect.left.toFloat(), y, layout.gridRect.right.toFloat(), y, line)
+            canvas.drawLine(layout.gridRect.left.toFloat(), y, layout.gridRect.right.toFloat(), y, linePaint(row))
         }
     }
 
@@ -181,9 +305,9 @@ object Form1BitmapRenderer {
         canvas: Canvas,
         layout: Form1Layout,
         project: PindouProject,
-        swatchSize: Int,
         paint: Paint,
     ) {
+        val swatchSize = (layout.cellSize * 0.55f).toInt().coerceAtLeast(16)
         val swatchPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = GRID_LINE_COLOR

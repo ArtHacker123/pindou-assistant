@@ -64,4 +64,20 @@ class Form1LayoutCalculatorTest {
         )
         assertTrue(Form1LayoutCalculator.exceedsLimit(Form1LayoutCalculator.compute(huge)))
     }
+
+    @Test
+    fun `largestFitCell respects both page limits`() {
+        val fitted = Form1LayoutCalculator.largestFitCell(maxCell = 96, maxCanvasWidth = 1000, maxCanvasHeight = 900) { cell ->
+            cell * 11 to cell * 8
+        }
+        assertEquals(90, fitted) // min(1000/11, 900/8) = min(90, 112) = 90
+    }
+
+    @Test
+    fun `largestFitCell returns 1 when nothing fits`() {
+        val fitted = Form1LayoutCalculator.largestFitCell(maxCell = 96, maxCanvasWidth = 10, maxCanvasHeight = 10) { cell ->
+            cell * 11 to cell * 8
+        }
+        assertEquals(1, fitted)
+    }
 }

@@ -120,6 +120,16 @@ This change creates a new Android app from scratch (Kotlin + Jetpack Compose) un
 - **Result**: every grid size floors at `0.6 × own fitScale` (fits the whole pattern, then allows a bit more), uniformly across 52/104/116/128.
 - **Known residual**: on a container-only resize (e.g. settings panel toggling) `fitScale` is not recomputed (only `clampOffset`), so the floor reflects the last full refit; currently benign (min is still below the new fit for practical panels), re-fix if a layout change ever outgrows it.
 
+### D16: Form 1 export — resolution presets + Form 2 visual parity (as implemented)
+- **Problem**: (1) the fixed per-cell-pixel choices (48/64/80/96) were unintuitive and misleading — "128 grid × 96 px" (grid body 12288 px) was promoted as a possible "maximum" yet the 64M-pixel guard meant a 128×128 grid could only ever export at 48 px/cell, and 64+ threw "Export too large"; (2) the exported image lacked Form 2's group guides, so printouts did not look like the on-screen pattern; (3) previewing at export resolution could allocate a >100 MB bitmap, and Android's hardware canvas hard-refuses drawing any bitmap with byteCount > ~100 MB (`RecordingCanvas.throwIfCannotDraw`), crashing on the 8K preset.
+- **Design**:
+  - **Visual parity**: Form 1 renderer now draws the same 5/10 group grid as Form 2 (base `0x55000000` + 5-cell `0x77000000` + 10-cell `0x99000000`, widths `max(1,0.03c)/max(1.5,0.06c)/max(2,0.12c)`), colors 10-multiple axis numbers blue (columns) / red (rows) bold, and drops the per-cell code threshold from 34 → 24 px to match Form 2.
+  - **Resolution presets** instead of px/cell: `A4 整页(自适应)` (largest layout fitting 210×297mm @300 DPI with 10 mm margins ≈2244×3271 px), `1080P` (width ≈1920), `4K` (width ≈3840), `最大尺寸` (largest pixel-budget-safe). A binary search (`Form1LayoutCalculator.largestFitCell`) reuses the real layout measure so the whole image (axes + grid + table) always fits the chosen target.
+  - **Pixel budget lowered** `MAX_EXPORT_PIXELS` 64M → 24M (≈96 MB ARGB_8888), safely under the ~100 MB canvas-draw ceiling and typical app-heap caps; out-of-budget presets degrade cell size rather than fail.
+  - **Preview decoupled** from export size: the export screen always previews at a fixed small cell (18 px), reporting actual output dimensions in the caption, so the preview bitmap can never exceed the draw limit.
+- **Trade-offs**: a true "8K" (7680 px wide) is physically unattainable in one bitmap for a near-square layout — it would need ~59M px (~236 MB) — so the highest tier is an honest "maximum that fits the device", and legend/table rows can be small when the whole sheet is one A4 page. `ExportScreen` renders at small cell so code text/color table are scaled in the preview thumbnail.
+- **Guard**: `Form1LayoutCalculatorTest` covers `largestFitCell` (respects both limits; returns 1 when nothing fits); existing pixel-guard tests still pass at the 24M ceiling.
+
 ## Risks / Trade-offs
 
 - [Risk] K-means randomness can produce slightly different quantCenters across runs → **Mitigation**: Support optional deterministic `seed` (default derive from `sourceHash`).
