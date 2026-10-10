@@ -81,6 +81,13 @@ This change creates a new Android app from scratch (Kotlin + Jetpack Compose) un
 - **Fix**: key the gesture block on the pattern identity — `.pointerInput(project)`. On regeneration the coroutine restarts and re-captures the current `onCellTap`, so writes land on the current selection state.
 - **Lesson**: when a `pointerInput` (or any remembered effect) captures a lambda/state that can be rebuilt while its own keys stay constant, key it on the captured state's *identity* (here `project`), never on a derived value (grid dimensions) that may stay unchanged across a rebuild.
 
+### D11: Form 2 selection spotlight & deselection (as implemented)
+- **Spotlight style — final**: cells of the selected `colorCode` keep full color and get an **inset amber outline** (`SELECT_ACCENT`, stroke `(cell*0.04).coerceIn(1.5f, 3f)`, inset `cell*0.08` so it never collides with the fine grid lines or the thicker group lines); all other cells are dimmed by a **black veil** (`SPOTLIGHT_DIM = Color(0x8C000000)`, ≈55%) that preserves hue (not gray).
+- **Iteration history** (why the final form): (1) desaturating every non-selected cell made the whole canvas gray and near-invisible for white beads → rejected; (2) a translucent gray mask (`0x70808080`) read as "dirty gray screen", no pop → rejected; (3) a frosted white veil (70%) muted colors into pastel and looked good, then was thinned to 50% — but with a **gray selected code** the veiled non-selected cells fell into the same tone range, so membership was ambiguous; also overall contrast stayed weak → replaced.
+- **Gray-parity fix**: because the veil relies on tone, it cannot disambiguate a gray selection, so a **hue-independent hard marker** (the accent outline) is always drawn on selected-code cells. Membership is decidable from the border, not from tone.
+- **Deselection**: (a) tapping outside the grid clears (works at fit zoom where margins exist); (b) **tapping any currently highlighted cell (same code) also clears** — this keeps deselection possible when zoomed in and the grid fills the entire viewport. The hint is folded into the idle info-bar text ("点击格子查看色号与坐标，点高亮格可取消选择") instead of permanent chrome.
+- **90° zoom-size note**: max zoom is a fixed cell size cap (`MAX_CELL_PX = 128f`) rather than a multiple of fit scale, so zoom behavior is uniform across pattern sizes.
+
 ## Risks / Trade-offs
 
 - [Risk] K-means randomness can produce slightly different quantCenters across runs → **Mitigation**: Support optional deterministic `seed` (default derive from `sourceHash`).

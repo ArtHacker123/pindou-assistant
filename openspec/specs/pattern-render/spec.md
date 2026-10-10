@@ -4,11 +4,11 @@
 TBD - created by archiving change pindou-android-pattern. Update Purpose after archive.
 ## Requirements
 ### Requirement: Form 2 interactive same-color highlight with coordinates
-The interactive view SHALL highlight every cell sharing the selected cell's bead `colorCode` when the user taps a cell, and SHALL display the tapped cell's coordinates (1-based row and column, origin top-left) together with the bead code.
+The interactive view SHALL highlight every cell sharing the selected cell's bead `colorCode` when the user taps a cell, and SHALL display the tapped cell's coordinates (1-based row and column, origin top-left) together with the bead code. The highlight SHALL use a spotlight style: cells of the selected code keep their full color and get an inset accent (amber) outline, while all other cells are dimmed by a black veil (≈55%) that preserves hue.
 
 #### Scenario: Tap highlights same color
 - **WHEN** the user taps a cell whose colorCode is `C5`
-- **THEN** all cells with colorCode `C5` are visually highlighted (e.g., stroked/overlay)
+- **THEN** all cells with colorCode `C5` keep full color with an inset accent outline, and all other cells are dimmed by a black spotlight veil
 
 #### Scenario: Coordinate display
 - **WHEN** the user taps the cell at grid position row 12, column 15
@@ -18,9 +18,24 @@ The interactive view SHALL highlight every cell sharing the selected cell's bead
 - **WHEN** the user taps empty space outside the grid
 - **THEN** the highlight is cleared and the info bar returns to its default state
 
+#### Scenario: Tap highlighted cell clears highlight
+- **WHEN** the user taps any cell currently highlighted (i.e., any cell of the selected `colorCode`)
+- **THEN** the highlight is cleared, regardless of zoom level; this keeps deselection possible while zoomed in and the grid fills the viewport
+
 #### Scenario: Highlight from color table
 - **WHEN** the user taps an item in the collapsible color table
 - **THEN** all cells of that bead color are highlighted, same as tapping a cell
+
+### Requirement: Group grid guides (Form 2)
+The interactive view SHALL overlay group guides on the grid: a thicker separator line every 10 cells, and bold numbers (10, 20, ...) at each group boundary. Group numbers SHALL remain pinned to the screen edges while panning/zooming and SHALL be drawn on a white chip so they stay readable over any cell color.
+
+#### Scenario: Group separators every 10 cells
+- **WHEN** any pattern is displayed in Form 2
+- **THEN** a thicker separator line appears every 10 cells and bold boundary numbers mark multiples of 10
+
+#### Scenario: Group numbers pinned while panning
+- **WHEN** the user pans or zooms so a group boundary crosses the visible area
+- **THEN** the corresponding boundary number stays pinned at the screen edge on a white chip with rounded corners
 
 ### Requirement: Form 1 (exported image) layout with axes, cell codes, and color table
 The system SHALL render Form 1 as an offline high-resolution image containing: 1-based column numbers across the top, 1-based row numbers on the left, the grid body where each cell shows its bead `colorCode`, and a color lookup table (code + color swatch, with name if available). The top-left corner cell area where axes meet SHALL be left blank.
