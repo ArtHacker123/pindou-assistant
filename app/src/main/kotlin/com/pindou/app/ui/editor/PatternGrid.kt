@@ -34,15 +34,17 @@ import kotlin.math.max
 
 private const val MAX_CELL_PX = 128f
 private const val GROUP = 10
+private const val HALF_GROUP = GROUP / 2
 private val GROUP_CHIP = Color(0xECFFFFFF)
 private val SPOTLIGHT_DIM = Color(0x8C000000)
 private val SELECT_ACCENT = Color(0xFFFFA000)
 
 /**
  * The Form 2 interactive canvas: a pan/zoom grid that draws only the visible
- * cells (viewport culling), with group guides every 10 cells. When
- * [selectedCode] is set, cells of that code get an inset accent outline while
- * cells of other codes get dimmed by a black spotlight veil.
+ * cells (viewport culling), with a thick guide every 10 cells and a finer
+ * guide every 5 cells. When [selectedCode] is set, cells of that code get an
+ * inset accent outline while cells of other codes get dimmed by a black
+ * spotlight veil.
  */
 @Composable
 fun PatternGrid(
@@ -270,6 +272,25 @@ fun PatternGrid(
             val y = offset.y + g * cell
             drawLine(groupColor, Offset(offset.x + c0 * cell, y), Offset(offset.x + c1 * cell, y), strokeWidth = groupStroke)
             g += GROUP
+        }
+
+        val halfColor = Color(0x77000000)
+        val halfStroke = max(1.5f, cell * 0.06f)
+        var h = ceil(c0 / HALF_GROUP.toFloat()).toInt() * HALF_GROUP
+        while (h <= c1) {
+            if (h % GROUP != 0) {
+                val x = offset.x + h * cell
+                drawLine(halfColor, Offset(x, offset.y + r0 * cell), Offset(x, offset.y + r1 * cell), strokeWidth = halfStroke)
+            }
+            h += HALF_GROUP
+        }
+        h = ceil(r0 / HALF_GROUP.toFloat()).toInt() * HALF_GROUP
+        while (h <= r1) {
+            if (h % GROUP != 0) {
+                val y = offset.y + h * cell
+                drawLine(halfColor, Offset(offset.x + c0 * cell, y), Offset(offset.x + c1 * cell, y), strokeWidth = halfStroke)
+            }
+            h += HALF_GROUP
         }
 
         if (cell >= 6f) {
