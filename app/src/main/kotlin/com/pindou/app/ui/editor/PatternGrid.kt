@@ -31,6 +31,8 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
 
+private const val MAX_CELL_PX = 128f
+
 /**
  * The Form 2 interactive canvas: a pan/zoom grid that draws only the visible
  * cells (viewport culling) and outlines every cell matching [selectedCode].
@@ -101,7 +103,7 @@ fun PatternGrid(
     }
 
     val minScale = fitScale * 0.6f
-    val maxScale = max(fitScale * 8f, 60f)
+    val maxScale = MAX_CELL_PX
 
     Canvas(
         modifier = modifier
