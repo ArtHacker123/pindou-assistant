@@ -1,8 +1,7 @@
 package com.pindou.core.generate
 
-import com.pindou.core.color.ColorDistance
-import com.pindou.core.color.NearestColor
-import com.pindou.core.color.RgbEuclideanDistance
+import com.pindou.core.color.ColorSpace
+import com.pindou.core.color.LabColorSpace
 import com.pindou.core.match.PaletteMapper
 import com.pindou.core.model.Grid
 import com.pindou.core.model.PindouProject
@@ -20,19 +19,22 @@ import com.pindou.core.util.sortedNaturallyBy
  *
  *  1. preprocess according to the image-type preset
  *  2. sample pixels and extract N representative colors (quantizer)
- *  3. map each representative color to a real bead color (palette)
- *  4. map every grid cell to the bead color of its nearest representative color
+ *  3. map each representative color to a real bead color (palette) — this fixes
+ *     the set of beads the pattern may use
+ *  4. map every grid cell directly to the perceptually closest bead among that
+ *     used set
  *
- * Every stage is pluggable, so new processors, quantizers, samplers or distance
- * metrics can be added without modifying this class.
+ * Every stage is pluggable, so new processors, quantizers, samplers or color
+ * spaces can be added without modifying this class.
  */
 class PatternGenerator(
     private val quantizers: QuantizerRegistry = QuantizerRegistry.default(),
     private val processors: ImageProcessorRegistry = ImageProcessorRegistry.default(),
     private val sampler: Sampler = UniformSampler(),
-    private val mapper: PaletteMapper = PaletteMapper(),
-    private val distance: ColorDistance = RgbEuclideanDistance,
+    private val space: ColorSpace = LabColorSpace,
 ) {
+
+    private val mapper = PaletteMapper(space)
 
     fun generate(image: PixelImage, config: GenerateConfig): PindouProject {
         require(config.gridWidth in 1..MAX_GRID) { "gridWidth must be 1..$MAX_GRID" }
@@ -44,7 +46,10 @@ class PatternGenerator(
         val k = config.colorCountTarget.coerceIn(1, config.palette.size)
         val centers = quantizers.get(config.quantizerId)
             .quantize(samples, k, QuantConfig(seed = config.seed))
-        val beadForCenter = mapper.mapCenters(centers, config.palette)
+
+        // Stage 3 decides which beads the pattern may use.
+        val usedBeads = mapper.mapCenters(centers, config.palette).distinctBy { it.code }
+        val usedRgb = usedBeads.map { it.rgb }
 
         val cells = ArrayList<String?>(config.gridWidth * config.gridHeight)
         for (row in 0 until config.gridHeight) {
@@ -53,9 +58,12 @@ class PatternGenerator(
                     cells.add(null)
                     continue
                 }
+                // Stage 4: snap the cell straight to its closest used bead. Going
+                // via the representative center instead can commit a cell to a
+                // visibly farther bead, so we skip that indirection.
                 val avg = AreaColor.average(processed, config.gridWidth, config.gridHeight, row, col)
-                val idx = NearestColor.indexOf(avg, centers, distance)
-                cells.add(if (idx >= 0) beadForCenter[idx].code else config.palette.items.first().code)
+                val idx = space.nearestIndex(avg, usedRgb)
+                cells.add(if (idx >= 0) usedBeads[idx].code else config.palette.items.first().code)
             }
         }
 

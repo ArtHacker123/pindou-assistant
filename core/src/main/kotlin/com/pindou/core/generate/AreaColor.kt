@@ -1,5 +1,6 @@
 package com.pindou.core.generate
 
+import com.pindou.core.color.Srgb
 import com.pindou.core.model.PixelImage
 import com.pindou.core.model.Rgb
 
@@ -31,30 +32,36 @@ object AreaColor {
 
     /**
      * Average RGB over the source rectangle mapped from grid cell ([row], [col]).
-     * Invalid pixels (see [PixelImage.valid]) are ignored. Falls back to white if
-     * the region is entirely invalid.
+     * Invalid pixels (see [PixelImage.valid]) are ignored. Averaging is done in
+     * linear light so mixing light and dark pixels yields the physically correct
+     * midtone instead of a too-dark sRGB mean. Falls back to white if the region
+     * is entirely invalid.
      */
     fun average(image: PixelImage, gridW: Int, gridH: Int, row: Int, col: Int): Rgb {
         val r = region(image, gridW, gridH, row, col)
-        var rs = 0L
-        var gs = 0L
-        var bs = 0L
+        var rs = 0.0
+        var gs = 0.0
+        var bs = 0.0
         var n = 0L
         for (y in r.top until r.maxY) {
             var index = y * image.width + r.left
             for (x in r.left until r.maxX) {
                 if (image.valid(x, y)) {
                     val p = image.pixels[index]
-                    rs += (p shr 16) and 0xFF
-                    gs += (p shr 8) and 0xFF
-                    bs += p and 0xFF
+                    rs += Srgb.toLinear((p shr 16) and 0xFF)
+                    gs += Srgb.toLinear((p shr 8) and 0xFF)
+                    bs += Srgb.toLinear(p and 0xFF)
                     n++
                 }
                 index++
             }
         }
         return if (n == 0L) Rgb(255, 255, 255)
-        else Rgb((rs / n).toInt(), (gs / n).toInt(), (bs / n).toInt())
+        else Rgb(
+            Srgb.fromLinear(rs / n),
+            Srgb.fromLinear(gs / n),
+            Srgb.fromLinear(bs / n),
+        )
     }
 
     private fun region(image: PixelImage, gridW: Int, gridH: Int, row: Int, col: Int): Region {
