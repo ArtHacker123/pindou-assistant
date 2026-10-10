@@ -379,7 +379,7 @@ fun PatternGrid(
             for (r in r0 until r1) {
                 for (c in c0 until c1) {
                     val code = grid[r, c] ?: continue
-                    val textPx = cell * 0.32f
+                    val textPx = cell * 0.45f
                     val key = "$code#${textPx.toInt()}"
                     val layout = textCache.getOrPut(key) {
                         textMeasurer.measure(

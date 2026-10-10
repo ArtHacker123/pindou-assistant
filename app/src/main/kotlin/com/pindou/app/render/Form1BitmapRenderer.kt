@@ -106,9 +106,9 @@ object Form1BitmapRenderer {
     }
 
     private fun paintsFor(cellOutPx: Int): Form1Paints {
-        val codeTextSize = (cellOutPx * 0.32f).coerceAtLeast(9f)
-        val labelTextSize = (cellOutPx * 0.34f).coerceAtLeast(11f)
-        val tableTextSize = (cellOutPx * 0.30f).coerceAtLeast(12f)
+        val codeTextSize = (cellOutPx * 0.45f).coerceAtLeast(9f)
+        val labelTextSize = (cellOutPx * 0.45f).coerceAtLeast(11f)
+        val tableTextSize = (cellOutPx * 0.45f).coerceAtLeast(12f)
 
         val codePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textAlign = Paint.Align.CENTER
@@ -209,7 +209,7 @@ object Form1BitmapRenderer {
         paint: Paint,
         groupPaint: Paint,
     ) {
-        val x = (layout.gridRect.left - PADDING).toFloat()
+        val x = layout.gridRect.left / 2f
         val fm = paint.fontMetrics
         val centerOffset = -(fm.ascent + fm.descent) / 2f
         for (row in 0 until gridHeight) {
