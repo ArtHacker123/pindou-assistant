@@ -4,11 +4,11 @@
 TBD - created by archiving change pindou-android-pattern. Update Purpose after archive.
 ## Requirements
 ### Requirement: Form 2 interactive same-color highlight with coordinates
-The interactive view SHALL highlight every cell sharing the selected cell's bead `colorCode` when the user taps a cell, and SHALL display the tapped cell's coordinates (1-based row and column, origin top-left) together with the bead code. The highlight SHALL use a spotlight style: cells of the selected code keep their full color and get an inset accent (amber) outline, while all other cells are dimmed by a black veil (≈55%) that preserves hue.
+The interactive view SHALL highlight every cell sharing the selected cell's bead `colorCode` when the user taps a cell, and SHALL display the tapped cell's coordinates (1-based row and column, origin top-left) together with the bead code. The highlight SHALL use a spotlight style: cells of the selected code keep their full color and get an inset accent (amber) outline, while all other cells are dimmed by a black veil (≈55%) that preserves hue. The exact tapped cell SHALL additionally be marked with a hollow circle tangent to the inset accent square, using the same ink color as the cell's code text (dark ink on light cells, light ink on dark cells) so the marker stays visible on any cell color.
 
 #### Scenario: Tap highlights same color
 - **WHEN** the user taps a cell whose colorCode is `C5`
-- **THEN** all cells with colorCode `C5` keep full color with an inset accent outline, and all other cells are dimmed by a black spotlight veil
+- **THEN** all cells with colorCode `C5` keep full color with an inset accent outline, and all other cells are dimmed by a black spotlight veil; the exact tapped cell also gets a hollow circle tangent to its accent square
 
 #### Scenario: Coordinate display
 - **WHEN** the user taps the cell at grid position row 12, column 15
