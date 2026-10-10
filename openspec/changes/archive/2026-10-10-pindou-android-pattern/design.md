@@ -104,6 +104,16 @@ This change creates a new Android app from scratch (Kotlin + Jetpack Compose) un
 - **Guard**: `Mard221PaletteFileTest` decodes the bundled asset and asserts 221 unique codes, `id` = 1..221, RGB in range, and natural-order sorting.
 - **Alternatives not taken**: `mard-221-github` (same codes, 77 RGB values differ from the cross-checked set) and `artkal-m-221-official` (Artkal's own M221 wording).
 
+### D14: Perceptual color pipeline (as implemented)
+- **Problem**: matching and averaging ran on raw sRGB numbers, so reads "失真": (1) averaging gamma-encoded sRGB bytes darkens high-contrast/gradient areas (black+white mean = 128, correct midtone ≈188); (2) RGB Euclidean distance is not perceptually uniform, so nearest-bead picks drifted (greens/blues/pastels); (3) cells were mapped via the nearest *representative center* instead of the nearest *bead*, so a cell could commit to a visibly farther bead.
+- **Design**: replace the old `ColorDistance`/`RgbEuclideanDistance` seam with a `ColorSpace` abstraction (`encode`/`decode`/`squaredDistance`) and thread it through quantizer, palette mapper and generator. Defaults:
+  - **Matching & clustering** in `LabColorSpace` (CIELAB D65, dE76); K-means runs on encoded Lab vectors so centroids follow perception.
+  - **Spatial area averaging** in linear light (`Srgb.toLinear/fromLinear`, IEC 61966-2-1) inside `AreaColor.average`.
+  - **Direct cell snap**: after `mapCenters` fixes the used bead set, each cell is assigned the perceptually closest bead among that set (no cell→center→bead indirection).
+- **Kept**: `RgbColorSpace` (identity, Euclidean) as a fast reference metric; deterministic seeding unchanged; `Grid`/`.pindou` format and palette data untouched.
+- **Guard**: `ColorSpaceTest` (round-trip, black/white Lab anchors, linear-midtone ≈188, perceptual nearest pick) + new `AreaColorTest` linear-mix case; existing pipeline tests unchanged and green.
+- **Alternatives not taken**: HSV/HSL — repackages RGB but is not perceptually uniform, hue is circular, and black/white have undefined hue, so it is wrong tool for nearest-color/averaging. CIEDE2000 — more accurate than dE76 but heavier; kept as future option behind the same `ColorSpace` seam.
+
 ## Risks / Trade-offs
 
 - [Risk] K-means randomness can produce slightly different quantCenters across runs → **Mitigation**: Support optional deterministic `seed` (default derive from `sourceHash`).

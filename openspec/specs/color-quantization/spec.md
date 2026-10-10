@@ -43,3 +43,18 @@ The system SHALL support deterministic quantization so that repeated runs on the
 - **WHEN** generation is re-run on the same working image with the same N and the same seed (e.g., derived from source hash)
 - **THEN** the representative colors and the resulting grid are identical to the previous run
 
+### Requirement: Perceptual color comparison and averaging
+The system SHALL compare and average colors in spaces that match human perception: relative color comparisons SHALL run in CIELAB (dE76) and spatial area averaging SHALL run in linear light, so nearest-bead picks and cell averages agree with human vision instead of raw sRGB arithmetic.
+
+#### Scenario: Nearest bead follows perception
+- **WHEN** a representative color sits between two bead palette entries
+- **THEN** the bead whose perceived difference is smallest (per dE76) is chosen, which is not always the nearest raw-sRGB entry
+
+#### Scenario: Cell average stays bright when mixing light and dark pixels
+- **WHEN** a grid cell covers an equal mix of black and white pixels
+- **THEN** the averaged color is the physically correct light midtone (~188), not the too-dark sRGB mean (~128)
+
+#### Scenario: Cells snap to the used bead set
+- **WHEN** a cell's average color is mapped after the representative beads are fixed
+- **THEN** the cell is assigned the perceptually closest bead among the beads already used by the pattern, without the extra cell-to-center indirection
+
