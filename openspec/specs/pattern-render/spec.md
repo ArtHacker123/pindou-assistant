@@ -26,6 +26,21 @@ The interactive view SHALL highlight every cell sharing the selected cell's bead
 - **WHEN** the user taps an item in the collapsible color table
 - **THEN** all cells of that bead color are highlighted, same as tapping a cell
 
+### Requirement: Invalid / empty cells carry no bead
+The system SHALL square a non-square cropped image before generation by padding it to a centered square with fully transparent margins, so grid contents are never stretched. A grid cell SHALL be an empty hole (no bead, no `colorCode`) when its source region is less than 50% valid. Validity SHALL come from the image's explicit foreground mask when present, otherwise fall back to per-pixel transparency (alpha >= 8). Empty holes SHALL be rendered in both Form 1 and Form 2 as a light-gray cell with a diagonal hatch, with no bead color and no code text, and SHALL be excluded from `paletteUsed`, per-code counts, and selection.
+
+#### Scenario: Non-square crop is not stretched
+- **WHEN** the user crops a region wider than tall (or taller than wide)
+- **THEN** the pattern keeps the subject's aspect ratio, with empty holes filling the padded margins instead of the subject being stretched
+
+#### Scenario: Padding margins show no color code
+- **WHEN** the pattern contains padded (invalid) margin cells
+- **THEN** those cells render as light-gray hatched holes, display no code, are not selectable, and count toward no bead totals
+
+#### Scenario: Foreground mask drives validity
+- **WHEN** the image carries an explicit foreground mask (future segmentation)
+- **THEN** cell validity and per-cell averaging follow the mask; when no mask is present, transparency defines validity
+
 ### Requirement: Group grid guides (Form 2)
 The interactive view SHALL overlay group guides on the grid: a thick separator line every 10 cells, a finer separator line every 5 cells (thicker and darker than the base grid line, thinner and lighter than the 10-cell line), and bold numbers (10, 20, ...) at each 10-cell boundary. The 5-cell guides SHALL be skipped where a 10-cell guide would overlap. Group numbers SHALL remain pinned to the screen edges while panning/zooming and SHALL be drawn on a white chip so they stay readable over any cell color. The two axes SHALL be color-coded so rows and columns stay distinguishable at any zoom: column numbers (top edge) use blue, row numbers (left edge) use red.
 

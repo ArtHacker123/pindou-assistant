@@ -88,6 +88,14 @@ This change creates a new Android app from scratch (Kotlin + Jetpack Compose) un
 - **Deselection**: (a) tapping outside the grid clears (works at fit zoom where margins exist); (b) **tapping any currently highlighted cell (same code) also clears** — this keeps deselection possible when zoomed in and the grid fills the entire viewport. The hint is folded into the idle info-bar text ("点击格子查看色号与坐标，点高亮格可取消选择") instead of permanent chrome.
 - **90° zoom-size note**: max zoom is a fixed cell size cap (`MAX_CELL_PX = 128f`) rather than a multiple of fit scale, so zoom behavior is uniform across pattern sizes.
 
+### D12: Square padding + cell validity (mask-first) (as implemented)
+- **Stretch root cause**: `AreaColor.average` maps the whole image onto the grid with independent X/Y sampling, while the grid is locked square (`updateGridSize`). A non-square crop therefore samples a non-square source region per cell and the subject appears stretched.
+- **Fix — pad to square with transparent margins**: `PixelImage.paddedToSquare()` (new, centered, `fillArgb = 0x00000000`) squares the working image once at crop-confirm; every subsequent re-generation reuses it at zero cost. Transparent (not white) is deliberate: both the sampler (`UniformSampler`) and area-averaging already filter fully transparent pixels, so the padding neither pollutes quantization centers nor wastes a color slot.
+- **Empty holes (`Grid.cells` now `List<String?>`):** `PatternGenerator` writes `null` for any cell whose source region is below `MIN_CELL_VALID = 0.5` (via new `AreaColor.coverage`), serialized as JSON null. `null` cells are excluded from `distinctCodes`/`paletteUsed`, per-code counts and selection; both Form 1 and Form 2 render them as a light-gray cell with a diagonal hatch and no code.
+- **Pixel-level mask (foreground segmentation hook):** `PixelImage` gained an optional `mask: BooleanArray?` (true = valid). When null, validity falls back to transparency (alpha >= 8). Sampling, averaging and coverage all route through `PixelImage.valid`, so a future foreground/background segmentation only needs to produce a mask — no pipeline change.
+- **Alternatives not taken**: (a) white padding — pollutes the quantization color centers and wastes a bead slot; (b) trimming the grid to valid content — breaks the square, uniform grid the user asked for.
+- **Interactions**: tapping an empty hole is a no-op (does not select, does not clear); counts filter out `null`; the exact-cell marker only draws on valid cells.
+
 ## Risks / Trade-offs
 
 - [Risk] K-means randomness can produce slightly different quantCenters across runs → **Mitigation**: Support optional deterministic `seed` (default derive from `sourceHash`).
@@ -96,6 +104,7 @@ This change creates a new Android app from scratch (Kotlin + Jetpack Compose) un
 - [Risk] Crop transform precision → **Mitigation**: Use integer rounding with bounds clamping; always crop from original bitmap.
 - [Trade-off] Decoupled quantization + palette mapping gives flexibility but requires two nearest-neighbor passes (centers→palette small; cells→centers up to 128×128*k small). Acceptable for MVP.
 - [Trade-off] JSON (uncompressed) for `.pindou` simple but larger than binary; 128×128 grid small (≤ ~64KB). Can gzip later if needed.
+- [Risk] Explicit `PixelImage.mask` must be carried through any processor that rebuilds the image or it will silently fall back to alpha-based validity → **Mitigation**: today no explicit mask exists (alpha drives validity), and `ImageProcessorRegistry` defaults are RGB-shaping only; when segmentation lands, thread the mask through the processor API as part of that work.
 
 ## Open Questions
 
