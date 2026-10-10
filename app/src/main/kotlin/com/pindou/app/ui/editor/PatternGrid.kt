@@ -295,14 +295,15 @@ fun PatternGrid(
 
         if (cell >= 6f) {
             val labelPx = (cell * 0.75f).coerceIn(14f, 32f)
-            val labelColor = Color(0xB3000000)
-            fun groupNumber(n: Int): TextLayoutResult {
-                val key = "G$n${labelPx.toInt()}"
+            val colLabelColor = Color(0xFF1565C0)
+            val rowLabelColor = Color(0xFFC62828)
+            fun groupNumber(n: Int, color: Color): TextLayoutResult {
+                val key = "G$n$color${labelPx.toInt()}"
                 return textCache.getOrPut(key) {
                     textMeasurer.measure(
                         text = AnnotatedString(n.toString()),
                         style = TextStyle(
-                            color = labelColor,
+                            color = color,
                             fontSize = with(density) { labelPx.toSp() },
                             fontWeight = FontWeight.Bold,
                         ),
@@ -313,7 +314,7 @@ fun PatternGrid(
             g = ceil(c0 / GROUP.toFloat()).toInt() * GROUP
             while (g <= c1) {
                 if (g != 0) {
-                    val layout = groupNumber(g)
+                    val layout = groupNumber(g, colLabelColor)
                     val cx = offset.x + g * cell
                     val ty = max(0f, offset.y - layout.size.height - 2f)
                     drawRoundRect(
@@ -332,7 +333,7 @@ fun PatternGrid(
             g = ceil(r0 / GROUP.toFloat()).toInt() * GROUP
             while (g <= r1) {
                 if (g != 0) {
-                    val layout = groupNumber(g)
+                    val layout = groupNumber(g, rowLabelColor)
                     val cy = offset.y + g * cell
                     val tx = max(0f, offset.x - layout.size.width - 2f)
                     drawRoundRect(
