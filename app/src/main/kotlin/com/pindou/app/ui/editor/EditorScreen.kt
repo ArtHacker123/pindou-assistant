@@ -127,6 +127,7 @@ fun EditorScreen(controller: PindouController) {
                     PatternGrid(
                         project = project,
                         selectedCode = selectedCode,
+                        selectedPos = selectedPos,
                         onCellTap = { row, col ->
                             if (row in 0 until g.height && col in 0 until g.width) {
                                 val code = g[row, col]

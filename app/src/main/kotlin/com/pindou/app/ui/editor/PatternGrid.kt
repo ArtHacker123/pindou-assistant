@@ -50,6 +50,7 @@ private val SELECT_ACCENT = Color(0xFFFFA000)
 fun PatternGrid(
     project: PindouProject,
     selectedCode: String?,
+    selectedPos: Pair<Int, Int>?,
     onCellTap: (row: Int, col: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -241,6 +242,14 @@ fun PatternGrid(
                             size = Size(cell - inset * 2, cell - inset * 2),
                             style = Stroke(width = stroke),
                         )
+                        if (selectedPos?.first == r && selectedPos?.second == c) {
+                            drawCircle(
+                                color = inkByCode[code] ?: Color.Black,
+                                radius = cell / 2f - inset,
+                                center = Offset(x + cell / 2f, y + cell / 2f),
+                                style = Stroke(width = (cell * 0.08f).coerceIn(2f, 5f)),
+                            )
+                        }
                     }
                 }
             }
