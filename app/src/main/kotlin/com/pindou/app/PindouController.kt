@@ -76,8 +76,8 @@ class PindouController(private val context: Context) {
     var paletteName by mutableStateOf(paletteMetas.firstOrNull()?.name)
     var colorCountAuto by mutableStateOf(true)
     var colorCountTarget by mutableStateOf(16)
-    var gridWidth by mutableStateOf(58)
-    var gridHeight by mutableStateOf(58)
+    var gridWidth by mutableStateOf(52)
+    var gridHeight by mutableStateOf(52)
     var exportCellSize by mutableStateOf(64)
 
     private var regenJob: Job? = null

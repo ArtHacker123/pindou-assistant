@@ -1,8 +1,8 @@
 package com.pindou.app.ui.editor
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntSize
 import com.pindou.core.model.PindouProject
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -105,24 +106,93 @@ fun PatternGrid(
     Canvas(
         modifier = modifier
             .onSizeChanged { container = it }
-            .pointerInput(grid.width, grid.height) {
-                detectTransformGestures { centroid, pan, zoom, _ ->
-                    if (scale <= 0f) return@detectTransformGestures
-                    val newScale = (scale * zoom).coerceIn(minScale, maxScale)
-                    val k = newScale / scale
-                    offset = Offset(
-                        centroid.x - (centroid.x - offset.x) * k,
-                        centroid.y - (centroid.y - offset.y) * k,
-                    ) + pan
-                    scale = newScale
-                    clampOffset()
-                }
-            }
-            .pointerInput(grid.width, grid.height) {
-                detectTapGestures { pos ->
-                    val col = floor((pos.x - offset.x) / scale).toInt()
-                    val row = floor((pos.y - offset.y) / scale).toInt()
-                    onCellTap(row, col)
+            .pointerInput(project) {
+                val touchSlop = viewConfiguration.touchSlop
+                val panSlop = touchSlop * 1.6f
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var panAccum = Offset.Zero
+                    var zoomAccum = 1f
+                    var pastSlop = false
+                    var canceled = false
+
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.changes.any { it.isConsumed }) {
+                            canceled = true
+                            break
+                        }
+
+                        val ch = event.changes
+                        var panX = 0f
+                        var panY = 0f
+                        var zoomChange = 1f
+                        var cx = 0f
+                        var cy = 0f
+                        var pressedCount = 0
+                        var spanDist = 0f
+                        var spanCount = 0
+                        for (i in ch.indices) {
+                            val c = ch[i]
+                            if (c.pressed && c.previousPressed) {
+                                panX += c.position.x - c.previousPosition.x
+                                panY += c.position.y - c.previousPosition.y
+                                for (j in i + 1 until ch.size) {
+                                    val o = ch[j]
+                                    if (o.pressed && o.previousPressed) {
+                                        val before = (c.previousPosition - o.previousPosition).getDistance()
+                                        val after = (c.position - o.position).getDistance()
+                                        if (before > 0f && after > 0f) zoomChange *= after / before
+                                        spanDist += after
+                                        spanCount++
+                                    }
+                                }
+                            }
+                            if (c.pressed) {
+                                cx += c.position.x
+                                cy += c.position.y
+                                pressedCount++
+                            }
+                        }
+                        val panChange =
+                            if (ch.isEmpty()) Offset.Zero else Offset(panX / ch.size, panY / ch.size)
+                        val centroid =
+                            if (pressedCount > 0) Offset(cx / pressedCount, cy / pressedCount) else null
+                        val spanSize = if (spanCount > 0) spanDist / spanCount else 0f
+
+                        if (!pastSlop) {
+                            panAccum += panChange
+                            zoomAccum *= zoomChange
+                            val zoomMotion = abs(1 - zoomAccum) * spanSize
+                            if (zoomMotion > touchSlop || panAccum.getDistance() > panSlop) {
+                                pastSlop = true
+                            }
+                        }
+
+                        if (pastSlop && scale > 0f && centroid != null) {
+                            if (zoomChange != 1f || panChange != Offset.Zero) {
+                                val newScale = (scale * zoomChange).coerceIn(minScale, maxScale)
+                                val k = newScale / scale
+                                offset = Offset(
+                                    centroid.x - (centroid.x - offset.x) * k,
+                                    centroid.y - (centroid.y - offset.y) * k,
+                                ) + panChange
+                                scale = newScale
+                                clampOffset()
+                            }
+                            event.changes.forEach {
+                                if (it.position != it.previousPosition) it.consume()
+                            }
+                        }
+
+                        if (!event.changes.any { it.pressed }) break
+                    }
+
+                    if (!pastSlop && !canceled && scale > 0f) {
+                        val col = floor((down.position.x - offset.x) / scale).toInt()
+                        val row = floor((down.position.y - offset.y) / scale).toInt()
+                        onCellTap(row, col)
+                    }
                 }
             },
     ) {
