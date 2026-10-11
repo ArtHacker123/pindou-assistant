@@ -82,8 +82,25 @@ class PindouController(private val context: Context) {
     var gridHeight by mutableStateOf(52)
     var exportSize by mutableStateOf(ExportSize.A4)
 
+    /** Whether saved/shared `.pindou` files embed the grid reference image (on by default). */
+    var includeReference by mutableStateOf(true)
+
     private var regenJob: Job? = null
     private var genSeq = 0
+
+    /**
+     * The grid-resolution reference image only depends on the working image, the
+     * image type and the grid size, so it is cached under exactly those inputs
+     * and reused across changes that only affect the color count / palette.
+     */
+    private data class ReferenceKey(
+        val image: PixelImage,
+        val imageType: String,
+        val gridWidth: Int,
+        val gridHeight: Int,
+    )
+    private var referenceKey: ReferenceKey? = null
+    private var cachedReference: PixelImage? = null
 
     fun palette(): Palette? = paletteName?.let { palettes.load(it) }
 
@@ -196,25 +213,34 @@ class PindouController(private val context: Context) {
         busy = true
         errorMessage = null
         val seq = ++genSeq
+        val type = imageType
+        val gw = gridWidth
+        val gh = gridHeight
         scope.launch {
             try {
-                val result = withContext(Dispatchers.Default) {
+                val (key, result) = withContext(Dispatchers.Default) {
+                    val newKey = ReferenceKey(image, type.id, gw, gh)
+                    val reuse = if (newKey == referenceKey) cachedReference else null
                     val hash = SourceHasher.hash(image)
-                    generator.generate(
+                    val generated = generator.generate(
                         image,
                         GenerateConfig(
-                            gridWidth = gridWidth,
-                            gridHeight = gridHeight,
+                            gridWidth = gw,
+                            gridHeight = gh,
                             palette = palette,
                             colorCountTarget = colorCountTarget,
-                            imageType = imageType,
+                            imageType = type,
                             seed = hash.hashCode().toLong(),
                             createdAt = System.currentTimeMillis(),
                             sourceHash = hash,
                         ),
+                        reference = reuse,
                     )
+                    newKey to generated
                 }
                 if (seq == genSeq) {
+                    referenceKey = key
+                    cachedReference = result.referenceGrid?.toImage()
                     project = result
                     screen = Screen.Editor
                 }
@@ -283,18 +309,20 @@ class PindouController(private val context: Context) {
             errorMessage = "需要「存储」权限才能保存到文档目录，请在系统设置中开启"
             return
         }
+        // Embed the reference image by default; the opt-out strips it for smaller files.
+        val toSave = if (includeReference) p else p.copy(referenceGrid = null)
         busy = true
         errorMessage = null
         scope.launch {
             try {
                 if (share) {
                     val file = withContext(Dispatchers.IO) {
-                        exportManager.saveProject(p, baseName(p))
+                        exportManager.saveProject(toSave, baseName(p))
                     }
                     exportManager.share(file, ExportManager.MIME_PINDOU, "分享交互图纸")
                 } else {
                     val uri = withContext(Dispatchers.IO) {
-                        exportManager.saveProjectToDocuments(p, baseName(p))
+                        exportManager.saveProjectToDocuments(toSave, baseName(p))
                     }
                     statusMessage = "已保存到 文档/PindouAssistant/${uri.lastPathSegment ?: ""}"
                 }

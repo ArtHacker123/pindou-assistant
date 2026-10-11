@@ -181,6 +181,20 @@ fun ExportScreen(controller: PindouController) {
                     onClick = { controller.exportPindou(share = true) },
                 ) { Text("分享 .pindou") }
             }
+            if (project.referenceGrid != null) {
+                Spacer(Modifier.height(8.dp))
+                FilterChip(
+                    selected = controller.includeReference,
+                    onClick = { controller.includeReference = !controller.includeReference },
+                    label = { Text("包含参考图（对比原图）") },
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    if (controller.includeReference) "文件内嵌原图参考，可在其它设备对比查看（文件更大）。"
+                    else "不内嵌参考图，文件更小，但其它设备打开后无法对比原图。",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
 
             Spacer(Modifier.height(24.dp))
             OutlinedButton(

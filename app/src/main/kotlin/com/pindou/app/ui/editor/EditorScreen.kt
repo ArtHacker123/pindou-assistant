@@ -3,6 +3,9 @@ package com.pindou.app.ui.editor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -69,6 +73,10 @@ fun EditorScreen(controller: PindouController) {
     var selectedPos by remember(project) { mutableStateOf<Pair<Int, Int>?>(null) }
     var tableExpanded by remember { mutableStateOf(true) }
     var paramsExpanded by remember { mutableStateOf(false) }
+    var showPattern by remember { mutableStateOf(true) }
+    var showReference by remember { mutableStateOf(false) }
+    var peeking by remember { mutableStateOf(false) }
+    val referenceImage = remember(project) { project?.referenceGrid?.toImage() }
 
     Scaffold(
         topBar = {
@@ -146,6 +154,9 @@ fun EditorScreen(controller: PindouController) {
                             }
                         },
                         modifier = Modifier.fillMaxSize(),
+                        reference = referenceImage,
+                        showPattern = if (peeking) false else showPattern,
+                        showReference = if (peeking) true else showReference,
                     )
                 } else {
                     Box(
@@ -179,6 +190,18 @@ fun EditorScreen(controller: PindouController) {
                     selectedPos = selectedPos,
                     name = selectedCode?.let { itemByCode[it]?.name },
                     sameColorCount = selectedCode?.let { counts[it] } ?: 0,
+                    referenceAvailable = referenceImage != null,
+                    showPattern = showPattern,
+                    showReference = showReference,
+                    onTogglePattern = {
+                        if (showPattern && !showReference) showReference = true
+                        showPattern = !showPattern
+                    },
+                    onToggleReference = {
+                        if (showReference && !showPattern) showPattern = true
+                        showReference = !showReference
+                    },
+                    onPeek = { peeking = it },
                 )
                 ColorTablePanel(
                     project = project,
@@ -296,28 +319,84 @@ private fun InfoBar(
     selectedPos: Pair<Int, Int>?,
     name: String?,
     sameColorCount: Int,
+    referenceAvailable: Boolean,
+    showPattern: Boolean,
+    showReference: Boolean,
+    onTogglePattern: () -> Unit,
+    onToggleReference: () -> Unit,
+    onPeek: (Boolean) -> Unit,
 ) {
     Divider()
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        if (selectedCode == null) {
-            Text("点击格子查看色号与坐标，点高亮格可取消选择", style = MaterialTheme.typography.bodyMedium)
-        } else {
-            val pos = selectedPos
-            if (pos != null) {
-                Text("第 ${pos.first + 1} 行 / 第 ${pos.second + 1} 列", style = MaterialTheme.typography.bodyMedium)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (selectedCode == null) {
+                Text("点击格子查看色号与坐标，点高亮格可取消选择", style = MaterialTheme.typography.bodyMedium)
+            } else {
+                val pos = selectedPos
+                if (pos != null) {
+                    Text("第 ${pos.first + 1} 行 / 第 ${pos.second + 1} 列", style = MaterialTheme.typography.bodyMedium)
+                }
+                Text(selectedCode, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                if (!name.isNullOrBlank()) {
+                    Text(name, style = MaterialTheme.typography.bodyMedium)
+                }
+                Text("同色 $sameColorCount 粒", style = MaterialTheme.typography.bodyMedium)
             }
-            Text(selectedCode, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-            if (!name.isNullOrBlank()) {
-                Text(name, style = MaterialTheme.typography.bodyMedium)
-            }
-            Text("同色 $sameColorCount 粒", style = MaterialTheme.typography.bodyMedium)
         }
+
+        if (referenceAvailable) {
+            Spacer(Modifier.height(6.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CompareChip(label = "图纸", on = showPattern, onClick = onTogglePattern)
+                CompareChip(label = "缩略图", on = showReference, onClick = onToggleReference)
+                PeekChip(onPeek = onPeek)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompareChip(label: String, on: Boolean, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.background(
+            if (on) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+            RoundedCornerShape(20.dp),
+        ),
+    ) {
+        Text(if (on) "$label ✓" else label)
+    }
+}
+
+/** A press-and-hold control that temporarily shows the reference only (A/B peek). */
+@Composable
+private fun PeekChip(onPeek: (Boolean) -> Unit) {
+    Box(
+        modifier = Modifier
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp))
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    onPeek(true)
+                    waitForUpOrCancellation()
+                    onPeek(false)
+                }
+            }
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("按住看原图", style = MaterialTheme.typography.labelLarge)
     }
 }
 

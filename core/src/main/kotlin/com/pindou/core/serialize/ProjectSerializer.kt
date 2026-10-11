@@ -8,10 +8,12 @@ import kotlinx.serialization.json.Json
 class ProjectFormatException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /** Reads and writes the self-contained `.pindou` JSON document. */
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 object ProjectSerializer {
     private val json = Json {
         prettyPrint = true
         encodeDefaults = true
+        explicitNulls = false
         ignoreUnknownKeys = true
     }
 

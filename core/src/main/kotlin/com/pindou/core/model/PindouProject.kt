@@ -27,9 +27,16 @@ data class PindouProject(
     val paletteSource: Palette,
     val paletteUsed: List<PaletteItem>,
     val grid: Grid,
+    /**
+     * Optional grid-resolution snapshot of the source colors (one pixel per
+     * cell, pre-snap). Enables source-vs-pattern comparison and editing against
+     * the original colors, including when the `.pindou` file is opened on
+     * another device without the source image.
+     */
+    val referenceGrid: ReferenceGrid? = null,
     val version: String = CURRENT_VERSION,
 ) {
     companion object {
-        const val CURRENT_VERSION = "1.0.0"
+        const val CURRENT_VERSION = "1.1.0"
     }
 }

@@ -15,6 +15,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntSize
 import com.pindou.core.model.PindouProject
+import com.pindou.core.model.PixelImage
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -35,11 +37,21 @@ import kotlin.math.max
 private const val MAX_CELL_PX = 128f
 private const val GROUP = 10
 private const val HALF_GROUP = GROUP / 2
+private const val EMPTY_ALPHA = 8
 private val GROUP_CHIP = Color(0xECFFFFFF)
 private val SPOTLIGHT_DIM = Color(0x8C000000)
 private val SELECT_ACCENT = Color(0xFFFFA000)
 private val EMPTY_CELL_BG = Color(0xFFF5F5F5)
 private val EMPTY_CELL_LINES = Color(0x59000000)
+
+private fun DrawScope.drawEmptyCell(x: Float, y: Float, cell: Float) {
+    drawRect(color = EMPTY_CELL_BG, topLeft = Offset(x, y), size = Size(cell, cell))
+    if (cell >= 8f) {
+        val hatch = max(1f, cell * 0.05f)
+        drawLine(EMPTY_CELL_LINES, Offset(x, y), Offset(x + cell, y + cell), strokeWidth = hatch)
+        drawLine(EMPTY_CELL_LINES, Offset(x + cell, y), Offset(x, y + cell), strokeWidth = hatch)
+    }
+}
 
 /**
  * The Form 2 interactive canvas: a pan/zoom grid that draws only the visible
@@ -47,6 +59,11 @@ private val EMPTY_CELL_LINES = Color(0x59000000)
  * guide every 5 cells. When [selectedCode] is set, cells of that code get an
  * inset accent outline while cells of other codes get dimmed by a black
  * spotlight veil.
+ *
+ * [showReference] paints the grid-resolution [reference] as a base layer under
+ * every cell (empty holes stay transparent); [showPattern] then paints the bead
+ * layer opaquely on top, so the reference remains visible only where there is
+ * no bead — the model used for editing/creating a pattern over a reference.
  */
 @Composable
 fun PatternGrid(
@@ -55,6 +72,9 @@ fun PatternGrid(
     selectedPos: Pair<Int, Int>?,
     onCellTap: (row: Int, col: Int) -> Unit,
     modifier: Modifier = Modifier,
+    reference: PixelImage? = null,
+    showPattern: Boolean = true,
+    showReference: Boolean = false,
 ) {
     val grid = project.grid
     val colorByCode = remember(project) {
@@ -218,26 +238,32 @@ fun PatternGrid(
         val r0 = floor((0f - offset.y) / cell).toInt().coerceAtLeast(0)
         val r1 = ceil((size.height - offset.y) / cell).toInt().coerceIn(0, grid.height)
 
+        val ref = if (showReference) reference else null
         for (r in r0 until r1) {
             for (c in c0 until c1) {
                 val code = grid[r, c]
                 val x = offset.x + c * cell
                 val y = offset.y + r * cell
-                if (code == null) {
-                    drawRect(
-                        color = EMPTY_CELL_BG,
-                        topLeft = Offset(x, y),
-                        size = Size(cell, cell),
-                    )
-                    if (cell >= 8f) {
-                        val hatch = max(1f, cell * 0.05f)
-                        drawLine(EMPTY_CELL_LINES, Offset(x, y), Offset(x + cell, y + cell), strokeWidth = hatch)
-                        drawLine(EMPTY_CELL_LINES, Offset(x + cell, y), Offset(x, y + cell), strokeWidth = hatch)
+
+                // Background layer: the reference image (holes stay empty), or a
+                // neutral backdrop when the reference is hidden.
+                if (ref != null && c < ref.width && r < ref.height) {
+                    val refArgb = ref.argb(c, r)
+                    if (((refArgb ushr 24) and 0xFF) >= EMPTY_ALPHA) {
+                        drawRect(color = Color(refArgb), topLeft = Offset(x, y), size = Size(cell, cell))
+                    } else {
+                        drawEmptyCell(x, y, cell)
                     }
-                    continue
+                } else {
+                    drawEmptyCell(x, y, cell)
                 }
+
+                // Pattern layer: opaque beads sit on top of the reference, so the
+                // reference shows through only where there is no bead.
+                if (!showPattern || code == null) continue
+                val bead = Color(colorByCode[code] ?: 0xFFFFFFFF.toInt())
                 drawRect(
-                    color = Color(colorByCode[code] ?: 0xFFFFFFFF.toInt()),
+                    color = bead,
                     topLeft = Offset(x, y),
                     size = Size(cell, cell),
                 )

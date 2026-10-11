@@ -152,6 +152,93 @@ class PatternGeneratorTest {
         assertEquals(777L, project.meta.createdAt)
         assertEquals("abc", project.meta.sourceHash)
         assertEquals("test", project.meta.paletteName)
-        assertEquals("1.0.0", project.version)
+        assertEquals("1.1.0", project.version)
+    }
+
+    @Test
+    fun `emits a grid-sized reference image`() {
+        val generator = PatternGenerator(processors = noOpProcessors)
+        val project = generator.generate(
+            bandsImage(),
+            GenerateConfig(
+                gridWidth = 2,
+                gridHeight = 2,
+                palette = TestPalettes.basic(),
+                colorCountTarget = 2,
+                imageType = ImageType.CARTOON,
+                seed = 1,
+            ),
+        )
+        val reference = project.referenceGrid
+        assertEquals(2, reference?.width)
+        assertEquals(2, reference?.height)
+        assertEquals(2 * 2 * 8, reference?.argbHex?.length)
+    }
+
+    @Test
+    fun `reference averages black and white in linear light`() {
+        // A single cell covering an equal mix of black and white.
+        val image = PixelImage(2, 1, intArrayOf(0xFF000000.toInt(), 0xFFFFFFFF.toInt()))
+        val generator = PatternGenerator(processors = noOpProcessors)
+        val project = generator.generate(
+            image,
+            GenerateConfig(
+                gridWidth = 1,
+                gridHeight = 1,
+                palette = TestPalettes.basic(),
+                colorCountTarget = 2,
+                imageType = ImageType.CARTOON,
+                seed = 1,
+            ),
+        )
+        val argb = project.referenceGrid!!.toImage().argb(0, 0)
+        val r = (argb shr 16) and 0xFF
+        assertEquals(255, (argb ushr 24) and 0xFF)
+        assertTrue("expected a light midtone, got $r", r in 186..190)
+    }
+
+    @Test
+    fun `reference marks empty holes transparent`() {
+        val width = 4
+        val height = 2
+        val pixels = IntArray(width * height)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                pixels[y * width + x] = if (x < width / 2) 0x00000000 else 0xFFFF0000.toInt()
+            }
+        }
+        val generator = PatternGenerator(processors = noOpProcessors)
+        val project = generator.generate(
+            PixelImage(width, height, pixels),
+            GenerateConfig(
+                gridWidth = 2,
+                gridHeight = 1,
+                palette = TestPalettes.basic(),
+                colorCountTarget = 2,
+                imageType = ImageType.CARTOON,
+                seed = 1,
+            ),
+        )
+        val reference = project.referenceGrid!!.toImage()
+        assertEquals(0, (reference.argb(0, 0) ushr 24) and 0xFF) // hole
+        assertEquals(255, (reference.argb(1, 0) ushr 24) and 0xFF) // valid
+    }
+
+    @Test
+    fun `reuses a provided reference and yields the same grid`() {
+        val generator = PatternGenerator(processors = noOpProcessors)
+        val config = GenerateConfig(
+            gridWidth = 8,
+            gridHeight = 8,
+            palette = TestPalettes.withMany(),
+            colorCountTarget = 4,
+            imageType = ImageType.CARTOON,
+            seed = 7,
+        )
+        val fresh = generator.generate(bandsImage(), config)
+        val reused = generator.generate(bandsImage(), config, fresh.referenceGrid!!.toImage())
+
+        assertEquals(fresh.grid.cells, reused.grid.cells)
+        assertEquals(fresh.referenceGrid, reused.referenceGrid)
     }
 }
