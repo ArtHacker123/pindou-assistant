@@ -5,16 +5,21 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
 import com.pindou.app.data.ImageLoader
+import com.pindou.app.data.toPixelImage
 import com.pindou.app.render.Form1BitmapRenderer
 import com.pindou.app.state.DocumentStore
+import com.pindou.app.state.EditTool
+import com.pindou.app.state.EditingSession
 import com.pindou.app.state.ExportService
 import com.pindou.app.state.GenerationSession
 import com.pindou.app.state.NavigationState
 import com.pindou.app.state.ReferenceService
 import com.pindou.core.imaging.ImageType
+import com.pindou.core.model.Grid
 import com.pindou.core.model.Palette
 import com.pindou.core.model.PindouProject
 import com.pindou.core.model.PixelImage
+import com.pindou.core.model.ProjectMeta
 import com.pindou.core.palette.PaletteMeta
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +47,11 @@ class PindouController(private val context: Context) {
     private val nav = NavigationState()
     private val documents = DocumentStore(context)
     private val references = ReferenceService()
-    private val generation = GenerationSession(context, scope, documents, nav, references)
+    private val generation = GenerationSession(
+        context, scope, documents, nav, references,
+        onRegenerated = { editing.clearHistory() },
+    )
+    private val editing = EditingSession(documents, references)
     private val export = ExportService(context, scope, nav)
 
     // ---- Observed state ---------------------------------------------------
@@ -63,6 +72,19 @@ class PindouController(private val context: Context) {
     val colorCountTarget: Int get() = generation.colorCountTarget
     val gridWidth: Int get() = generation.gridWidth
     val gridHeight: Int get() = generation.gridHeight
+
+    val editMode: Boolean get() = editing.editMode
+    val editTool: EditTool get() = editing.tool
+    val brushCode: String? get() = editing.brushCode
+
+    /** The cell under the finger in edit mode (cursor highlight), or null. */
+    val editCursor: Pair<Int, Int>? get() = editing.cursor
+
+    /** Whether the grid carries manual edits since the last generation / open. */
+    val edited: Boolean get() = documents.edited
+
+    /** True when the project has a source image it can be regenerated from. */
+    val hasSource: Boolean get() = documents.workingImage != null
 
     var exportSize: ExportSize
         get() = export.exportSize
@@ -103,6 +125,7 @@ class PindouController(private val context: Context) {
 
     fun openProject(parsed: PindouProject) {
         documents.updateProject(parsed)
+        editing.clearHistory()
         generation.applyFromProject(parsed)
         nav.go(Screen.Editor)
     }
@@ -131,6 +154,81 @@ class PindouController(private val context: Context) {
         generation.updateColorCountSelection(isAuto, count)
 
     fun generate() = generation.generate()
+
+    // ---- Editing ----------------------------------------------------------
+
+    fun enterEdit() = editing.enter()
+
+    fun exitEdit() = editing.exit()
+    fun selectEditTool(tool: EditTool) = editing.selectTool(tool)
+    fun selectBrush(code: String?) = editing.selectBrush(code)
+
+    /** Reports the cell under the finger so the editor can draw the cursor highlight. */
+    fun updateEditCursor(row: Int, col: Int) = editing.setCursor(row, col)
+
+    fun clearEditCursor() = editing.clearCursor()
+
+    /** Applies the active editing tool at a grid cell. */
+    fun applyEdit(row: Int, col: Int, preferReference: Boolean = false) =
+        editing.applyAt(row, col, preferReference)
+
+    fun beginStroke() = editing.beginStroke()
+    fun endStroke() = editing.endStroke()
+
+    val canUndo: Boolean get() = editing.canUndo
+    val canRedo: Boolean get() = editing.canRedo
+    fun undoEdit() = editing.undo()
+    fun redoEdit() = editing.redo()
+
+    fun paletteFor(name: String): Palette? = generation.paletteFor(name)
+
+    /** Confirmed palette change: remap every bead to the nearest new-palette color. */
+    fun remapPalette(name: String) {
+        val palette = generation.paletteFor(name) ?: return
+        editing.remapTo(palette)
+        generation.applyPaletteName(name)
+    }
+
+    /** Confirmed blank-resize: clear the grid to the new size (no source image). */
+    fun clearGrid(size: Int) {
+        editing.resizeTo(size)
+        generation.applyGridSize(size)
+    }
+
+    /** Regenerates the pattern at a new size (source-image projects, keeps the source). */
+    fun resizeGridRegenerate(size: Int) = generation.updateGridSize(size)
+
+    /** Starts a blank pattern (no source image) and opens it directly in edit mode. */
+    fun startFreeCreation(paletteName: String, size: Int) {
+        val palette = generation.paletteFor(paletteName) ?: return
+        val grid = Grid(size, size, List(size * size) { null })
+        val meta = ProjectMeta(
+            gridWidth = size,
+            gridHeight = size,
+            imageType = ImageType.CARTOON.id,
+            paletteName = palette.name,
+            paletteVersion = palette.version,
+            colorCountTarget = 0,
+            createdAt = System.currentTimeMillis(),
+        )
+        documents.setWorking(null)
+        documents.updateProject(PindouProject(meta, palette, emptyList(), grid, referenceGrid = null))
+        editing.clearHistory()
+        generation.applyFree(paletteName, size)
+        editing.enter()
+        nav.go(Screen.Editor)
+    }
+
+    /** Loads a reference image and stores its grid-resolution reference on the current project. */
+    fun loadReference(uri: Uri) {
+        try {
+            val image = ImageLoader.loadBitmap(context, uri).toPixelImage()
+            editing.loadReference(image, generation.imageType)
+        } catch (e: Exception) {
+            Log.w(TAG, "loadReference failed for $uri", e)
+            nav.showError(e.message ?: "参考图导入失败")
+        }
+    }
 
     // ---- Export & share ---------------------------------------------------
 

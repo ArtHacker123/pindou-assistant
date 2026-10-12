@@ -39,6 +39,7 @@ class GenerationSession(
     private val nav: NavigationState,
     private val references: ReferenceService,
     private val generator: PatternGenerator = PatternGenerator(),
+    private val onRegenerated: () -> Unit = {},
 ) {
 
     private val TAG = "GenerationSession"
@@ -67,6 +68,30 @@ class GenerationSession(
     private var cachedReference: PixelImage? = null
 
     fun palette(): Palette? = paletteName?.let { palettes.load(it) }
+
+    /** Loads a palette by name (used by free creation and palette remaps). */
+    fun paletteFor(name: String): Palette? = runCatching { palettes.load(name) }.getOrNull()
+
+    /** Syncs the palette parameter without triggering regeneration (used after a remap). */
+    fun applyPaletteName(name: String) {
+        paletteName = name
+    }
+
+    /** Syncs the grid-size parameter without triggering regeneration (used after a resize). */
+    fun applyGridSize(size: Int) {
+        gridWidth = size
+        gridHeight = size
+    }
+
+    /** Switches the session to a blank free-creation document's parameters. */
+    fun applyFree(paletteName: String, size: Int) {
+        this.paletteName = paletteName
+        imageType = ImageType.CARTOON
+        colorCountAuto = true
+        colorCountTarget = 16
+        gridWidth = size
+        gridHeight = size
+    }
 
     /** Applies the parameters embedded in an opened project without regenerating. */
     fun applyFromProject(project: PindouProject) {
@@ -160,6 +185,7 @@ class GenerationSession(
                     referenceKey = key
                     cachedReference = reference
                     documents.updateProject(result)
+                    onRegenerated()
                     nav.go(Screen.Editor)
                 }
             } catch (e: Exception) {

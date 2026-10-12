@@ -3,6 +3,7 @@ package com.pindou.app.ui.editor
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -75,6 +76,13 @@ fun PatternGrid(
     reference: PixelImage? = null,
     showPattern: Boolean = true,
     showReference: Boolean = false,
+    editMode: Boolean = false,
+    moveMode: Boolean = false,
+    onEdit: (row: Int, col: Int) -> Unit = { _, _ -> },
+    onEditStart: () -> Unit = {},
+    onEditEnd: () -> Unit = {},
+    highlightCell: Pair<Int, Int>? = null,
+    onEditCursor: (row: Int, col: Int, active: Boolean) -> Unit = { _, _, _ -> },
 ) {
     val grid = project.grid
     val colorByCode = remember(project) {
@@ -88,6 +96,7 @@ fun PatternGrid(
 
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
+    val cursorColor = MaterialTheme.colorScheme.primary
     val textCache = remember(project) { HashMap<String, TextLayoutResult>() }
 
     var container by remember { mutableStateOf(IntSize.Zero) }
@@ -137,15 +146,77 @@ fun PatternGrid(
     Canvas(
         modifier = modifier
             .onSizeChanged { container = it }
-            .pointerInput(project) {
+            .pointerInput(editMode, moveMode, grid.width, grid.height) {
                 val touchSlop = viewConfiguration.touchSlop
                 val panSlop = touchSlop * 1.6f
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+
+                    // A floating overlay (the draggable tool bar) consumed this
+                    // touch, so it is not a draw, pan, or cell tap.
+                    if (down.isConsumed) {
+                        var fingerDown = true
+                        while (fingerDown) {
+                            val ev = awaitPointerEvent()
+                            fingerDown = ev.changes.any { it.pressed }
+                        }
+                        return@awaitEachGesture
+                    }
+
+                    var drawing = editMode && !moveMode
+                    var strokeStarted = false
+                    var lastEdit = -1
                     var panAccum = Offset.Zero
                     var zoomAccum = 1f
                     var pastSlop = false
                     var canceled = false
+                    var cursorRow = Int.MIN_VALUE
+                    var cursorCol = Int.MIN_VALUE
+
+                    fun cellAt(position: Offset): Pair<Int, Int>? {
+                        if (scale <= 0f) return null
+                        val col = floor((position.x - offset.x) / scale).toInt()
+                        val row = floor((position.y - offset.y) / scale).toInt()
+                        return if (row in 0 until grid.height && col in 0 until grid.width) row to col else null
+                    }
+
+                    fun editAt(position: Offset) {
+                        val cell = cellAt(position) ?: return
+                        val (row, col) = cell
+                        val index = row * grid.width + col
+                        if (index != lastEdit) {
+                            lastEdit = index
+                            onEdit(row, col)
+                        }
+                    }
+
+                    fun startStroke() {
+                        if (!strokeStarted) {
+                            strokeStarted = true
+                            onEditStart()
+                        }
+                    }
+
+                    fun markCursor(position: Offset) {
+                        val cell = cellAt(position)
+                        if (cell == null) {
+                            if (cursorRow != Int.MIN_VALUE) {
+                                cursorRow = Int.MIN_VALUE
+                                cursorCol = Int.MIN_VALUE
+                                onEditCursor(0, 0, false)
+                            }
+                        } else if (cell.first != cursorRow || cell.second != cursorCol) {
+                            cursorRow = cell.first
+                            cursorCol = cell.second
+                            onEditCursor(cell.first, cell.second, true)
+                        }
+                    }
+
+                    if (drawing) {
+                        startStroke()
+                        editAt(down.position)
+                        markCursor(down.position)
+                    }
 
                     while (true) {
                         val event = awaitPointerEvent()
@@ -194,35 +265,52 @@ fun PatternGrid(
                             if (pressedCount > 0) Offset(cx / pressedCount, cy / pressedCount) else null
                         val spanSize = if (spanCount > 0) spanDist / spanCount else 0f
 
-                        if (!pastSlop) {
-                            panAccum += panChange
-                            zoomAccum *= zoomChange
-                            val zoomMotion = abs(1 - zoomAccum) * spanSize
-                            if (zoomMotion > touchSlop || panAccum.getDistance() > panSlop) {
-                                pastSlop = true
-                            }
-                        }
+                        // A second finger in edit mode switches from drawing to navigating.
+                        if (drawing && pressedCount >= 2) drawing = false
 
-                        if (pastSlop && scale > 0f && centroid != null) {
-                            if (zoomChange != 1f || panChange != Offset.Zero) {
-                                val newScale = (scale * zoomChange).coerceIn(minScale, maxScale)
-                                val k = newScale / scale
-                                offset = Offset(
-                                    centroid.x - (centroid.x - offset.x) * k,
-                                    centroid.y - (centroid.y - offset.y) * k,
-                                ) + panChange
-                                scale = newScale
-                                clampOffset()
+                        if (drawing) {
+                            startStroke()
+                            ch.firstOrNull { it.pressed }?.let {
+                                editAt(it.position)
+                                markCursor(it.position)
                             }
                             event.changes.forEach {
                                 if (it.position != it.previousPosition) it.consume()
+                            }
+                        } else {
+                            if (!pastSlop) {
+                                panAccum += panChange
+                                zoomAccum *= zoomChange
+                                val zoomMotion = abs(1 - zoomAccum) * spanSize
+                                if (zoomMotion > touchSlop || panAccum.getDistance() > panSlop) {
+                                    pastSlop = true
+                                }
+                            }
+
+                            if (pastSlop && scale > 0f && centroid != null) {
+                                if (zoomChange != 1f || panChange != Offset.Zero) {
+                                    val newScale = (scale * zoomChange).coerceIn(minScale, maxScale)
+                                    val k = newScale / scale
+                                    offset = Offset(
+                                        centroid.x - (centroid.x - offset.x) * k,
+                                        centroid.y - (centroid.y - offset.y) * k,
+                                    ) + panChange
+                                    scale = newScale
+                                    clampOffset()
+                                }
+                                event.changes.forEach {
+                                    if (it.position != it.previousPosition) it.consume()
+                                }
                             }
                         }
 
                         if (!event.changes.any { it.pressed }) break
                     }
 
-                    if (!pastSlop && !canceled && scale > 0f) {
+                    if (cursorRow != Int.MIN_VALUE) onEditCursor(0, 0, false)
+                    if (strokeStarted) onEditEnd()
+
+                    if (!editMode && !pastSlop && !canceled && scale > 0f) {
                         val col = floor((down.position.x - offset.x) / scale).toInt()
                         val row = floor((down.position.y - offset.y) / scale).toInt()
                         onCellTap(row, col)
@@ -283,7 +371,8 @@ fun PatternGrid(
                             size = Size(cell - inset * 2, cell - inset * 2),
                             style = Stroke(width = stroke),
                         )
-                        if (selectedPos?.first == r && selectedPos?.second == c) {
+                        val sel = selectedPos
+                        if (sel != null && sel.first == r && sel.second == c) {
                             drawCircle(
                                 color = inkByCode[code] ?: Color.Black,
                                 radius = cell / 2f - inset,
@@ -421,6 +510,27 @@ fun PatternGrid(
                     val y = offset.y + r * cell + (cell - layout.size.height) / 2f
                     drawText(layout, topLeft = Offset(x, y))
                 }
+            }
+        }
+
+        highlightCell?.let { (hr, hc) ->
+            if (hr in r0 until r1 && hc in c0 until c1) {
+                val x = offset.x + hc * cell
+                val y = offset.y + hr * cell
+                val stroke = (cell * 0.1f).coerceIn(2f, 6f)
+                val inset = stroke * 0.6f
+                drawRect(
+                    color = Color(0xCC000000),
+                    topLeft = Offset(x + inset, y + inset),
+                    size = Size(cell - inset * 2, cell - inset * 2),
+                    style = Stroke(width = stroke),
+                )
+                drawRect(
+                    color = cursorColor,
+                    topLeft = Offset(x + inset * 1.8f, y + inset * 1.8f),
+                    size = Size(cell - inset * 3.6f, cell - inset * 3.6f),
+                    style = Stroke(width = stroke * 0.7f),
+                )
             }
         }
     }

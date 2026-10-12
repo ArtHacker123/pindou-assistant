@@ -1,8 +1,11 @@
 package com.pindou.app.ui.editor
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -14,16 +17,30 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.Colorize
+import androidx.compose.material.icons.filled.FormatColorFill
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.PanTool
+import androidx.compose.material.icons.filled.Redo
+import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
@@ -38,36 +55,49 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.pindou.app.PindouController
-import com.pindou.core.model.PindouProject
+import com.pindou.app.R
+import com.pindou.app.state.EditTool
 import com.pindou.core.imaging.ImageType
+import com.pindou.core.model.PindouProject
+import kotlinx.coroutines.launch
 
 private val GRID_SIZES = listOf(29, 52, 58, 78, 104, 116, 128)
 private val COLOR_COUNTS = listOf(4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128)
 private const val AUTO_COLOR_COUNT = 16
 
 /**
- * The merged parameter + pattern screen: a collapsible parameter panel on top of
- * the interactive Form 2 grid. Any parameter change regenerates the pattern in
- * place via [PindouController].
+ * The pattern screen: a view mode (parameter panel + tap-to-highlight Form 2
+ * grid, reference compare) and an edit mode (tool bar + direct grid drawing)
+ * over the same [PatternGrid]. Editing mutations go through [PindouController]
+ * and are reflected immediately.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorScreen(controller: PindouController) {
     val project = controller.project
     val grid = project?.grid
+    val editMode = controller.editMode
 
     var selectedCode by remember(project) { mutableStateOf<String?>(null) }
     var selectedPos by remember(project) { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -78,18 +108,36 @@ fun EditorScreen(controller: PindouController) {
     var peeking by remember { mutableStateOf(false) }
     val referenceImage = remember(project) { project?.referenceGrid?.toImage() }
 
+    var pendingPalette by remember { mutableStateOf<String?>(null) }
+    var pendingSize by remember { mutableStateOf<Int?>(null) }
+    var pendingRegen by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var paletteOpen by remember { mutableStateOf(false) }
+    var toolbarOffset by remember { mutableStateOf(Offset.Zero) }
+
+    val referenceLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri -> uri?.let { controller.loadReference(it) } }
+
+    fun runOrConfirm(action: () -> Unit) {
+        if (controller.edited) pendingRegen = action else action()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(grid?.let { "生成图纸 ${it.width}×${it.height}" } ?: "生成图纸") },
+                title = {
+                    val label = if (editMode) "编辑图纸" else "生成图纸"
+                    val dims = grid?.let { "${it.width}×${it.height}" }
+                    Text(if (dims != null) "$label $dims" else label)
+                },
                 navigationIcon = {
-                    IconButton(onClick = { controller.goHome() }) {
+                    IconButton(onClick = { if (editMode) controller.exitEdit() else controller.goHome() }) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
                     TextButton(
-                        enabled = controller.workingImage != null,
+                        enabled = project != null,
                         onClick = { paramsExpanded = !paramsExpanded },
                         modifier = Modifier.background(
                             if (paramsExpanded) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
@@ -103,10 +151,18 @@ fun EditorScreen(controller: PindouController) {
                             modifier = Modifier.size(20.dp),
                         )
                     }
-                    TextButton(
-                        enabled = project != null && !controller.busy,
-                        onClick = { controller.goExport() },
-                    ) { Text("导出") }
+                    if (editMode) {
+                        TextButton(onClick = { referenceLauncher.launch("image/*") }) { Text("参考图") }
+                        TextButton(onClick = { controller.exitEdit() }) { Text("完成") }
+                    } else {
+                        TextButton(enabled = project != null, onClick = { controller.enterEdit() }) {
+                            Text("编辑")
+                        }
+                        TextButton(
+                            enabled = project != null && !controller.busy,
+                            onClick = { controller.goExport() },
+                        ) { Text("导出") }
+                    }
                 },
             )
         },
@@ -116,11 +172,24 @@ fun EditorScreen(controller: PindouController) {
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            if (paramsExpanded && controller.workingImage != null) {
+            if (paramsExpanded && project != null) {
                 ParamsPanel(
                     controller = controller,
-                    editable = controller.workingImage != null,
+                    onImageType = { type -> runOrConfirm { controller.updateImageType(type) } },
+                    onPalette = { name -> pendingPalette = name },
+                    onSize = { size ->
+                        if (controller.hasSource && !controller.edited) {
+                            controller.resizeGridRegenerate(size)
+                        } else {
+                            pendingSize = size
+                        }
+                    },
+                    onColorCount = { auto, count -> runOrConfirm { controller.updateColorCountSelection(auto, count) } },
                 )
+            }
+
+            if (editMode && project != null) {
+                EditActionBar(controller, onOpenPalette = { paletteOpen = true })
             }
 
             Box(
@@ -134,8 +203,8 @@ fun EditorScreen(controller: PindouController) {
                     val g = project.grid
                     PatternGrid(
                         project = project,
-                        selectedCode = selectedCode,
-                        selectedPos = selectedPos,
+                        selectedCode = if (editMode) null else selectedCode,
+                        selectedPos = if (editMode) null else selectedPos,
                         onCellTap = { row, col ->
                             if (row in 0 until g.height && col in 0 until g.width) {
                                 val code = g[row, col]
@@ -155,8 +224,17 @@ fun EditorScreen(controller: PindouController) {
                         },
                         modifier = Modifier.fillMaxSize(),
                         reference = referenceImage,
-                        showPattern = if (peeking) false else showPattern,
+                        showPattern = if (peeking) false else if (editMode) true else showPattern,
                         showReference = if (peeking) true else showReference,
+                        editMode = editMode,
+                        moveMode = controller.editTool == EditTool.MOVE,
+                        onEdit = { row, col -> controller.applyEdit(row, col, peeking) },
+                        onEditStart = { controller.beginStroke() },
+                        onEditEnd = { controller.endStroke() },
+                        highlightCell = controller.editCursor,
+                        onEditCursor = { row, col, active ->
+                            if (active) controller.updateEditCursor(row, col) else controller.clearEditCursor()
+                        },
                     )
                 } else {
                     Box(
@@ -180,36 +258,361 @@ fun EditorScreen(controller: PindouController) {
                         CircularProgressIndicator()
                     }
                 }
+
+                if (editMode && project != null) {
+                    FloatingToolbar(
+                        selected = controller.editTool,
+                        onSelect = controller::selectEditTool,
+                        onMove = { delta -> toolbarOffset += delta },
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .offset { IntOffset(toolbarOffset.x.toInt(), toolbarOffset.y.toInt()) },
+                    )
+                }
             }
 
             if (project != null) {
                 val itemByCode = remember(project) { project.paletteSource.items.associateBy { it.code } }
                 val counts = remember(project) { project.grid.cells.filterNotNull().groupingBy { it }.eachCount() }
                 InfoBar(
+                    editMode = editMode,
+                    toolLabel = controller.editTool.label,
+                    brushCode = controller.brushCode,
                     selectedCode = selectedCode,
                     selectedPos = selectedPos,
                     name = selectedCode?.let { itemByCode[it]?.name },
                     sameColorCount = selectedCode?.let { counts[it] } ?: 0,
                     referenceAvailable = referenceImage != null,
-                    showPattern = showPattern,
                     showReference = showReference,
+                    onToggleReference = {
+                        if (!editMode && showReference && !showPattern) showPattern = true
+                        showReference = !showReference
+                    },
+                    showPattern = showPattern,
                     onTogglePattern = {
                         if (showPattern && !showReference) showReference = true
                         showPattern = !showPattern
-                    },
-                    onToggleReference = {
-                        if (showReference && !showPattern) showPattern = true
-                        showReference = !showReference
                     },
                     onPeek = { peeking = it },
                 )
                 ColorTablePanel(
                     project = project,
-                    selectedCode = selectedCode,
+                    selectedCode = if (editMode) controller.brushCode else selectedCode,
                     expanded = tableExpanded,
                     onToggle = { tableExpanded = !tableExpanded },
-                    onSelect = { selectedCode = it },
+                    onSelect = { if (editMode) controller.selectBrush(it) else selectedCode = it },
                 )
+            }
+        }
+    }
+
+    pendingPalette?.let { name ->
+        AlertDialog(
+            onDismissRequest = { pendingPalette = null },
+            title = { Text("更换色板") },
+            text = { Text("将把当前全部珠子按最近颜色重映射到新色板，是否继续？") },
+            confirmButton = {
+                TextButton(onClick = { controller.remapPalette(name); pendingPalette = null }) { Text("继续") }
+            },
+            dismissButton = { TextButton(onClick = { pendingPalette = null }) { Text("取消") } },
+        )
+    }
+
+    pendingSize?.let { size ->
+        val regenerate = controller.hasSource
+        AlertDialog(
+            onDismissRequest = { pendingSize = null },
+            title = { Text(if (regenerate) "重新生成" else "更改尺寸") },
+            text = {
+                Text(
+                    if (regenerate) {
+                        "重新生成（新尺寸）会丢弃已手动编辑的内容，是否继续？"
+                    } else {
+                        "更改尺寸将清空当前图纸（无源图项目），是否继续？"
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (regenerate) controller.resizeGridRegenerate(size) else controller.clearGrid(size)
+                    pendingSize = null
+                }) { Text("继续") }
+            },
+            dismissButton = { TextButton(onClick = { pendingSize = null }) { Text("取消") } },
+        )
+    }
+
+    pendingRegen?.let { action ->
+        AlertDialog(
+            onDismissRequest = { pendingRegen = null },
+            title = { Text("重新生成") },
+            text = { Text("重新生成会丢弃已手动编辑的内容，是否继续？") },
+            confirmButton = {
+                TextButton(onClick = { action(); pendingRegen = null }) { Text("继续") }
+            },
+            dismissButton = { TextButton(onClick = { pendingRegen = null }) { Text("取消") } },
+        )
+    }
+
+    if (paletteOpen) {
+        PalettePickerDialog(controller) { paletteOpen = false }
+    }
+}
+
+/**
+ * A full-palette color picker grouped by bead series (the leading letters of a
+ * color code, e.g. `A`, `C`, `M`). Tapping a swatch sets the brush color.
+ */
+@Composable
+private fun PalettePickerDialog(controller: PindouController, onDismiss: () -> Unit) {
+    val palette = controller.palette() ?: return
+    val items = palette.items
+    val series = remember(palette) {
+        items.map { it.code.takeWhile { ch -> ch.isLetter() } }.distinct()
+    }
+    val current = controller.brushCode
+    val usedCodes = remember(controller.project) {
+        controller.project?.paletteUsed?.map { it.code }?.toSet().orEmpty()
+    }
+    val colorBySeries = remember(items) {
+        items.groupBy { it.code.takeWhile { ch -> ch.isLetter() } }
+            .mapValues { (_, list) ->
+                val r = list.sumOf { it.r } / list.size
+                val g = list.sumOf { it.g } / list.size
+                val b = list.sumOf { it.b } / list.size
+                Color(r, g, b)
+            }
+    }
+    var selectedSeries by remember(series) {
+        val cur = current?.takeWhile { it.isLetter() }
+        mutableStateOf(if (cur != null && cur in series) cur else series.firstOrNull().orEmpty())
+    }
+    val visible = remember(items, selectedSeries) { items.filter { it.code.startsWith(selectedSeries) } }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("选择颜色") },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                val scope = rememberCoroutineScope()
+                val listState = rememberLazyListState()
+                val canScrollLeft by remember {
+                    derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
+                }
+                val canScrollRight by remember {
+                    derivedStateOf { (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) < series.lastIndex }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { scope.launch { listState.animateScrollBy(-560f) } },
+                        enabled = canScrollLeft,
+                    ) {
+                        Icon(
+                            Icons.Filled.KeyboardArrowLeft,
+                            contentDescription = "上一组色系",
+                            modifier = Modifier.size(32.dp),
+                        )
+                    }
+                    LazyRow(
+                        state = listState,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        items(series) { s ->
+                            val on = s == selectedSeries
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(if (on) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                                    .clickable { selectedSeries = s }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .background(colorBySeries[s] ?: Color(0xFFBBBBBB), RoundedCornerShape(4.dp)),
+                                )
+                                Text(s, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    IconButton(
+                        onClick = { scope.launch { listState.animateScrollBy(560f) } },
+                        enabled = canScrollRight,
+                    ) {
+                        Icon(
+                            Icons.Filled.KeyboardArrowRight,
+                            contentDescription = "下一组色系",
+                            modifier = Modifier.size(32.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(6),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    gridItems(visible, key = { it.code }) { item ->
+                        val selected = item.code == current
+                        val used = item.code in usedCodes
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable {
+                                controller.selectBrush(item.code)
+                                onDismiss()
+                            },
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(36.dp)
+                                    .background(Color(item.rgb.toArgb()), RoundedCornerShape(6.dp))
+                                    .border(
+                                        width = if (selected) 3.dp else if (used) 2.dp else 1.dp,
+                                        color = if (selected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else if (used) {
+                                            Color(0xFF666666)
+                                        } else {
+                                            Color(0xFFBBBBBB)
+                                        },
+                                        shape = RoundedCornerShape(6.dp),
+                                    ),
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(item.code, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
+    )
+}
+
+/** Maps an editing tool to the icon shown in the tool bar. */
+@Composable
+private fun EditTool.icon(): ImageVector = when (this) {
+    EditTool.PAINT -> Icons.Filled.Brush
+    EditTool.ERASE -> ImageVector.vectorResource(R.drawable.ic_eraser)
+    EditTool.EYEDROPPER -> Icons.Filled.Colorize
+    EditTool.BUCKET -> Icons.Filled.FormatColorFill
+    EditTool.MOVE -> Icons.Filled.PanTool
+}
+
+/**
+ * The bottom action bar (in edit mode): the move tool, undo/redo, and the
+ * current-color swatch that opens the full series picker. The drawing tools
+ * live in the draggable [FloatingToolbar] on the canvas.
+ */
+@Composable
+private fun EditActionBar(controller: PindouController, onOpenPalette: () -> Unit) {
+    Divider()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        val moveOn = controller.editTool == EditTool.MOVE
+        IconButton(
+            onClick = { controller.selectEditTool(EditTool.MOVE) },
+            modifier = Modifier.background(
+                if (moveOn) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                RoundedCornerShape(50),
+            ),
+        ) {
+            Icon(Icons.Filled.PanTool, contentDescription = EditTool.MOVE.label)
+        }
+        IconButton(onClick = { controller.undoEdit() }, enabled = controller.canUndo) {
+            Icon(Icons.Filled.Undo, contentDescription = "撤销")
+        }
+        IconButton(onClick = { controller.redoEdit() }, enabled = controller.canRedo) {
+            Icon(Icons.Filled.Redo, contentDescription = "重做")
+        }
+        Spacer(Modifier.weight(1f))
+        val brush = controller.brushCode
+        val rgb = brush?.let { controller.palette()?.item(it)?.rgb }
+        if (brush != null) {
+            Text(brush, style = MaterialTheme.typography.labelSmall)
+        }
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .background(Color(rgb?.toArgb() ?: 0xFFEEEEEE.toInt()), RoundedCornerShape(6.dp))
+                .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp))
+                .clickable { onOpenPalette() },
+            contentAlignment = Alignment.Center,
+        ) {
+            if (brush == null) {
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = "选择颜色", modifier = Modifier.size(20.dp))
+            }
+        }
+    }
+    Divider()
+}
+
+/**
+ * The floating drawing-tool dock. It sits on top of the canvas and can be
+ * dragged to any position: a transparent gesture catcher fills the dock and
+ * consumes touches (so the grid below never starts a stroke), while the tool
+ * buttons on top still receive taps.
+ */
+@Composable
+private fun FloatingToolbar(
+    selected: EditTool,
+    onSelect: (EditTool) -> Unit,
+    onMove: (Offset) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val drawTools = listOf(EditTool.PAINT, EditTool.ERASE, EditTool.EYEDROPPER, EditTool.BUCKET)
+    Box(
+        modifier = modifier
+            .shadow(4.dp, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, Color(0xCCCCCCCC), RoundedCornerShape(14.dp)),
+    ) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        down.consume()
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull() ?: break
+                            if (!change.pressed) break
+                            if (change.position != change.previousPosition) {
+                                onMove(change.position - change.previousPosition)
+                                change.consume()
+                            }
+                        }
+                    }
+                },
+        )
+        Column(
+            modifier = Modifier.padding(2.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            drawTools.forEach { tool ->
+                val on = selected == tool
+                IconButton(
+                    onClick = { onSelect(tool) },
+                    modifier = Modifier.background(
+                        if (on) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                        RoundedCornerShape(50),
+                    ),
+                ) {
+                    Icon(tool.icon(), contentDescription = tool.label)
+                }
             }
         }
     }
@@ -218,8 +621,12 @@ fun EditorScreen(controller: PindouController) {
 @Composable
 private fun ParamsPanel(
     controller: PindouController,
-    editable: Boolean,
+    onImageType: (ImageType) -> Unit,
+    onPalette: (String) -> Unit,
+    onSize: (Int) -> Unit,
+    onColorCount: (Boolean, Int) -> Unit,
 ) {
+    val hasSource = controller.workingImage != null
     Divider()
     Column(
         modifier = Modifier
@@ -231,9 +638,9 @@ private fun ParamsPanel(
                 label = "图像类型",
                 selected = controller.imageType.displayName,
                 options = ImageType.values().map { it.displayName },
-                enabled = editable,
+                enabled = hasSource,
                 modifier = Modifier.weight(1f),
-                onSelect = { controller.updateImageType(ImageType.values()[it]) },
+                onSelect = { onImageType(ImageType.values()[it]) },
             )
             FieldDropdown(
                 label = "拼豆色板",
@@ -241,9 +648,9 @@ private fun ParamsPanel(
                     .firstOrNull { it.name == controller.paletteName }
                     ?.displayName ?: "请选择",
                 options = controller.paletteMetas.map { "${it.displayName}（${it.colorCount} 色）" },
-                enabled = editable,
+                enabled = true,
                 modifier = Modifier.weight(1f),
-                onSelect = { controller.updatePalette(controller.paletteMetas[it].name) },
+                onSelect = { onPalette(controller.paletteMetas[it].name) },
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -251,20 +658,20 @@ private fun ParamsPanel(
                 label = "图纸尺寸",
                 selected = "${controller.gridWidth}×${controller.gridHeight}",
                 options = GRID_SIZES.map { "${it}×${it}" },
-                enabled = editable,
+                enabled = true,
                 modifier = Modifier.weight(1f),
-                onSelect = { controller.updateGridSize(GRID_SIZES[it]) },
+                onSelect = { onSize(GRID_SIZES[it]) },
             )
             FieldDropdown(
                 label = "用色数量",
                 selected = if (controller.colorCountAuto) "自动" else controller.colorCountTarget.toString(),
                 options = listOf("自动") + COLOR_COUNTS.map { it.toString() },
-                enabled = editable,
+                enabled = hasSource,
                 modifier = Modifier.weight(1f),
                 onSelect = {
                     val auto = it == 0
                     val count = if (auto) AUTO_COLOR_COUNT else COLOR_COUNTS[it - 1]
-                    controller.updateColorCountSelection(auto, count)
+                    onColorCount(auto, count)
                 },
             )
         }
@@ -315,15 +722,18 @@ private fun FieldDropdown(
 
 @Composable
 private fun InfoBar(
+    editMode: Boolean,
+    toolLabel: String,
+    brushCode: String?,
     selectedCode: String?,
     selectedPos: Pair<Int, Int>?,
     name: String?,
     sameColorCount: Int,
     referenceAvailable: Boolean,
-    showPattern: Boolean,
     showReference: Boolean,
-    onTogglePattern: () -> Unit,
     onToggleReference: () -> Unit,
+    showPattern: Boolean,
+    onTogglePattern: () -> Unit,
     onPeek: (Boolean) -> Unit,
 ) {
     Divider()
@@ -337,7 +747,14 @@ private fun InfoBar(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (selectedCode == null) {
+            if (editMode) {
+                Text("工具：$toolLabel", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    if (brushCode != null) "当前珠子 $brushCode" else "请在下方选择珠子颜色",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            } else if (selectedCode == null) {
                 Text("点击格子查看色号与坐标，点高亮格可取消选择", style = MaterialTheme.typography.bodyMedium)
             } else {
                 val pos = selectedPos
@@ -352,15 +769,19 @@ private fun InfoBar(
             }
         }
 
-        if (referenceAvailable) {
+        if (referenceAvailable || editMode) {
             Spacer(Modifier.height(6.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CompareChip(label = "图纸", on = showPattern, onClick = onTogglePattern)
-                CompareChip(label = "缩略图", on = showReference, onClick = onToggleReference)
-                PeekChip(onPeek = onPeek)
+                if (!editMode) {
+                    CompareChip(label = "图纸", on = showPattern, onClick = onTogglePattern)
+                }
+                CompareChip(label = "参考图", on = showReference, onClick = onToggleReference)
+                if (referenceAvailable) {
+                    PeekChip(onPeek = onPeek)
+                }
             }
         }
     }

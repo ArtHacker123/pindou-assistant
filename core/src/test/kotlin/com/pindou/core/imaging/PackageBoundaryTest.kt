@@ -12,12 +12,25 @@ import java.io.File
  */
 class PackageBoundaryTest {
 
-    private val allowedRoots = setOf("model", "color", "util", "imaging")
-
     @Test
     fun `imaging does not depend on higher layers`() {
-        val dir = File("src/main/kotlin/com/pindou/core/imaging")
-        assertTrue("imaging source dir not found at ${dir.absolutePath}", dir.isDirectory)
+        assertNoForbiddenImports(
+            packageName = "imaging",
+            allowedRoots = setOf("model", "color", "util", "imaging"),
+        )
+    }
+
+    @Test
+    fun `editor does not depend on higher layers`() {
+        assertNoForbiddenImports(
+            packageName = "editor",
+            allowedRoots = setOf("model", "color", "util", "editor"),
+        )
+    }
+
+    private fun assertNoForbiddenImports(packageName: String, allowedRoots: Set<String>) {
+        val dir = File("src/main/kotlin/com/pindou/core/$packageName")
+        assertTrue("$packageName source dir not found at ${dir.absolutePath}", dir.isDirectory)
 
         val violations = ArrayList<String>()
         dir.listFiles { f -> f.extension == "kt" }?.sortedBy { it.name }?.forEach { file ->
@@ -32,6 +45,6 @@ class PackageBoundaryTest {
             }
         }
 
-        assertTrue("imaging must not depend on higher layers:\n${violations.joinToString("\n")}", violations.isEmpty())
+        assertTrue("$packageName must not depend on higher layers:\n${violations.joinToString("\n")}", violations.isEmpty())
     }
 }
