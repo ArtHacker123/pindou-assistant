@@ -6,6 +6,7 @@ import android.net.Uri
 import android.util.Log
 import com.pindou.app.data.ImageLoader
 import com.pindou.app.data.PatternEntry
+import com.pindou.app.data.PindouTemplate
 import com.pindou.app.render.Form1BitmapRenderer
 import com.pindou.app.state.DocumentStore
 import com.pindou.app.state.CropPurpose
@@ -17,6 +18,7 @@ import com.pindou.app.state.HistorySession
 import com.pindou.app.state.NavigationState
 import com.pindou.app.state.ReferenceService
 import com.pindou.core.imaging.ImageType
+import com.pindou.core.match.PaletteMapper
 import com.pindou.core.model.Grid
 import com.pindou.core.model.Palette
 import com.pindou.core.model.PindouProject
@@ -256,10 +258,31 @@ class PindouController(private val context: Context) {
     /** Starts a blank pattern (no source image) and opens it directly in edit mode. */
     fun startFreeCreation(paletteName: String, size: Int) {
         val palette = generation.paletteFor(paletteName) ?: return
-        val grid = Grid(size, size, List(size * size) { null })
+        openBlankProject(palette, Grid(size, size, List(size * size) { null }))
+    }
+
+    /** Starts a pattern from a built-in template, keeping the template's own size. */
+    fun startTemplateCreation(template: PindouTemplate) {
+        val paletteName = paletteMetas.firstOrNull()?.name ?: return
+        val palette = generation.paletteFor(paletteName) ?: return
+        val w = template.width
+        val h = template.height
+        val cells = MutableList<String?>(w * h) { null }
+        val mapper = PaletteMapper()
+        template.sprite.forEachIndexed { r, row ->
+            row.forEachIndexed { c, ch ->
+                val rgb = template.colors[ch] ?: return@forEachIndexed
+                cells[r * w + c] = mapper.nearestItem(rgb, palette.items).code
+            }
+        }
+        openBlankProject(palette, Grid(w, h, cells))
+    }
+
+    /** Opens a blank (no source image) project in edit mode. */
+    private fun openBlankProject(palette: Palette, grid: Grid) {
         val meta = ProjectMeta(
-            gridWidth = size,
-            gridHeight = size,
+            gridWidth = grid.width,
+            gridHeight = grid.height,
             imageType = ImageType.CARTOON.id,
             paletteName = palette.name,
             paletteVersion = palette.version,
@@ -270,7 +293,7 @@ class PindouController(private val context: Context) {
         documents.updateProject(PindouProject(meta, palette, emptyList(), grid, referenceGrid = null))
         documents.markFreeCreation()
         editing.clearHistory()
-        generation.applyFree(paletteName, size)
+        generation.applyFree(palette.name, grid.width)
         editing.enter()
         nav.updateShowReference(false)
         nav.go(Screen.Editor)

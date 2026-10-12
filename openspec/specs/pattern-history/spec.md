@@ -5,15 +5,15 @@ TBD - created by archiving change add-pattern-history-and-save. Update Purpose a
 ## Requirements
 ### Requirement: Home surfaces recent saved patterns
 
-The home screen SHALL show the most recent saved patterns (up to a small limit) as thumbnails, ordered newest first, together with an entry to open the full history page. It SHALL show a loading state while the list is being read and a hint when no patterns have been saved yet. The list SHALL be refreshed every time the home screen becomes the current screen, when the app resumes while the home screen is showing, and immediately after a pattern is saved.
+The home screen SHALL show the most recent saved patterns (up to a small limit) as a scrollable grid of thumbnail cards, ordered newest first, together with an entry to open the full history page. It SHALL show a loading state while the list is being read and, when no patterns have been saved yet, a bead-style illustration with a hint. The list SHALL be refreshed every time the home screen becomes the current screen, when the app resumes while the home screen is showing, and immediately after a pattern is saved.
 
 #### Scenario: Recent patterns shown
 - **WHEN** the user opens the app with one or more saved `.pindou` patterns
-- **THEN** the home screen shows thumbnails of the most recent patterns and a "查看全部" entry
+- **THEN** the home screen shows a grid of the most recent patterns and a "查看全部" entry
 
 #### Scenario: Empty history hint
 - **WHEN** no patterns have been saved yet
-- **THEN** the home screen shows a hint that saved patterns will appear there, and no thumbnails
+- **THEN** the home screen shows a bead-style illustration and a hint that start creating
 
 #### Scenario: Open a recent pattern
 - **WHEN** the user taps a recent thumbnail
