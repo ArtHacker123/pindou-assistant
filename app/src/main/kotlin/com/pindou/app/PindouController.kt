@@ -292,6 +292,7 @@ class PindouController(private val context: Context) {
         export.exportPindou(documents.project, share, onSaved = {
             if (!share) {
                 documents.markSaved()
+                history.refresh()
                 onSaved?.invoke()
             }
         })
@@ -301,6 +302,7 @@ class PindouController(private val context: Context) {
     fun saveProject(onSaved: (() -> Unit)? = null) {
         export.exportPindou(documents.project, share = false, includeReference = true, onSaved = {
             documents.markSaved()
+            history.refresh()
             onSaved?.invoke()
         })
     }

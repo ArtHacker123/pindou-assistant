@@ -27,7 +27,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,8 +61,6 @@ fun HomeScreen(controller: PindouController) {
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success -> if (success) cameraUri?.let { controller.pickImage(it) } }
-
-    LaunchedEffect(Unit) { controller.refreshHistory() }
 
     Column(
         modifier = Modifier
