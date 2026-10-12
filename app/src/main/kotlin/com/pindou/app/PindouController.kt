@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
 import com.pindou.app.data.ImageLoader
+import com.pindou.app.data.PatternEntry
 import com.pindou.app.render.Form1BitmapRenderer
 import com.pindou.app.state.DocumentStore
 import com.pindou.app.state.CropPurpose
@@ -12,6 +13,7 @@ import com.pindou.app.state.EditTool
 import com.pindou.app.state.EditingSession
 import com.pindou.app.state.ExportService
 import com.pindou.app.state.GenerationSession
+import com.pindou.app.state.HistorySession
 import com.pindou.app.state.NavigationState
 import com.pindou.app.state.ReferenceService
 import com.pindou.core.imaging.ImageType
@@ -31,6 +33,7 @@ sealed interface Screen {
     data object Crop : Screen
     data object Editor : Screen
     data object Export : Screen
+    data object History : Screen
 }
 
 /**
@@ -53,6 +56,7 @@ class PindouController(private val context: Context) {
     )
     private val editing = EditingSession(documents, references)
     private val export = ExportService(context, scope, nav)
+    private val history = HistorySession(context, scope)
 
     // ---- Observed state ---------------------------------------------------
 
@@ -65,6 +69,10 @@ class PindouController(private val context: Context) {
     val errorMessage: String? get() = nav.errorMessage
     val statusMessage: String? get() = nav.statusMessage
     val busy: Boolean get() = nav.busy
+
+    /** Saved patterns for the home "recent" row and the history screen, newest first. */
+    val historyItems: List<PatternEntry> get() = history.items
+    val historyLoading: Boolean get() = history.loading
 
     val imageType: ImageType get() = generation.imageType
     val paletteName: String? get() = generation.paletteName
@@ -186,6 +194,9 @@ class PindouController(private val context: Context) {
     fun goEditor() { if (documents.project != null) nav.go(Screen.Editor) }
     fun goExport() { if (documents.project != null) nav.go(Screen.Export) }
     fun goHome() { nav.go(Screen.Home) }
+    fun goHistory() { nav.go(Screen.History) }
+    fun refreshHistory() = history.refresh()
+    fun deleteHistory(entry: PatternEntry) = history.delete(entry)
     fun clearError() = nav.clearError()
     fun clearStatus() = nav.clearStatus()
 
@@ -283,6 +294,14 @@ class PindouController(private val context: Context) {
                 documents.markSaved()
                 onSaved?.invoke()
             }
+        })
+    }
+
+    /** One-tap save to Documents that always embeds the reference image. */
+    fun saveProject(onSaved: (() -> Unit)? = null) {
+        export.exportPindou(documents.project, share = false, includeReference = true, onSaved = {
+            documents.markSaved()
+            onSaved?.invoke()
         })
     }
 }

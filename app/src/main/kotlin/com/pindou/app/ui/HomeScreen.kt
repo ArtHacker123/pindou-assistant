@@ -3,16 +3,23 @@ package com.pindou.app.ui
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -20,20 +27,26 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pindou.app.PindouController
 import com.pindou.app.data.ExportManager
+import com.pindou.app.data.PatternEntry
 
 private val FREE_SIZES = listOf(29, 52, 58, 78, 104, 116, 128)
 private const val FREE_DEFAULT_SIZE = 52
+private const val RECENT_LIMIT = 6
 
 @Composable
 fun HomeScreen(controller: PindouController) {
@@ -50,46 +63,34 @@ fun HomeScreen(controller: PindouController) {
         ActivityResultContracts.TakePicture()
     ) { success -> if (success) cameraUri?.let { controller.pickImage(it) } }
 
-    val openLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> uri?.let { controller.openPindou(it) } }
+    LaunchedEffect(Unit) { controller.refreshHistory() }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
     ) {
-        Text("拼豆助手", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(8.dp))
-        Text(
-            "导入图片，生成可打印、可交互、可分享的拼豆图纸。",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Spacer(Modifier.height(32.dp))
+        Text("拼豆助手", style = MaterialTheme.typography.headlineMedium)
+        Spacer(Modifier.height(4.dp))
+        Text("导入图片生成图纸，或直接开始创作。", style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.height(24.dp))
 
-        Button(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = { galleryLauncher.launch("image/*") },
-        ) { Text("从相册选择") }
-
-        Spacer(Modifier.height(12.dp))
-        Button(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = {
-                val file = exporter.newCameraFile()
-                val uri = exporter.uriFor(file)
-                cameraUri = uri
-                cameraLauncher.launch(uri)
-            },
-        ) { Text("拍照") }
-
-        Spacer(Modifier.height(12.dp))
-        OutlinedButton(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = { openLauncher.launch(arrayOf("application/x-pindou", "*/*")) },
-        ) { Text("打开 .pindou 图纸") }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(
+                modifier = Modifier.weight(1f),
+                onClick = { galleryLauncher.launch("image/*") },
+            ) { Text("从相册生成") }
+            Button(
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    val file = exporter.newCameraFile()
+                    val uri = exporter.uriFor(file)
+                    cameraUri = uri
+                    cameraLauncher.launch(uri)
+                },
+            ) { Text("拍照生成") }
+        }
 
         Spacer(Modifier.height(12.dp))
         OutlinedButton(
@@ -98,19 +99,28 @@ fun HomeScreen(controller: PindouController) {
         ) { Text("自由创作（空白图纸）") }
 
         Spacer(Modifier.height(32.dp))
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                Text("内置色板", style = MaterialTheme.typography.titleSmall)
-                Spacer(Modifier.height(4.dp))
-                controller.paletteMetas.forEach { meta ->
-                    Text("• ${meta.displayName}（${meta.colorCount} 色）")
-                }
-                Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("最近图纸", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { controller.goHistory() }) { Text("查看全部") }
+        }
+        Spacer(Modifier.height(8.dp))
+
+        val recent = controller.historyItems.take(RECENT_LIMIT)
+        when {
+            controller.historyLoading && recent.isEmpty() ->
+                Text("正在加载…", style = MaterialTheme.typography.bodySmall)
+            recent.isEmpty() ->
                 Text(
-                    "提示：分享的 .pindou 文件可在其它设备用本应用打开，直接查看交互图纸。",
+                    "还没有保存的图纸。保存后会自动出现在这里。",
                     style = MaterialTheme.typography.bodySmall,
                 )
-            }
+            else ->
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(recent, key = { it.uri.toString() }) { entry ->
+                        RecentCard(entry = entry, onClick = { controller.openPindou(entry.uri) })
+                    }
+                }
         }
     }
 
@@ -122,6 +132,32 @@ fun HomeScreen(controller: PindouController) {
                 controller.startFreeCreation(paletteName, size)
                 showFreeDialog = false
             },
+        )
+    }
+}
+
+@Composable
+private fun RecentCard(entry: PatternEntry, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(96.dp)
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        GridThumbnail(
+            project = entry.project,
+            modifier = Modifier
+                .size(96.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFFEEEEEE)),
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            entry.title,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
         )
     }
 }

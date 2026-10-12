@@ -187,14 +187,24 @@ fun EditorScreen(controller: PindouController) {
                         )
                     }
                     if (editMode) {
-                        TextButton(onClick = { controller.exitEdit() }) { Text("完成") }
+                        TextButton(
+                            enabled = project != null && !controller.busy,
+                            onClick = { controller.saveProject() },
+                        ) { Text("保存") }
+                        TextButton(onClick = {
+                            controller.saveProject()
+                            controller.exitEdit()
+                        }) { Text("完成") }
                     } else {
                         TextButton(enabled = project != null, onClick = { controller.enterEdit() }) {
                             Text("编辑")
                         }
                         TextButton(
                             enabled = project != null && !controller.busy,
-                            onClick = { controller.goExport() },
+                            onClick = {
+                                controller.saveProject()
+                                controller.goExport()
+                            },
                         ) { Text("导出") }
                     }
                 },
@@ -417,7 +427,7 @@ fun EditorScreen(controller: PindouController) {
             confirmButton = {
                 TextButton(onClick = {
                     confirmLeave = false
-                    controller.exportPindou(share = false) { controller.goHome() }
+                    controller.saveProject { controller.goHome() }
                 }) { Text("保存") }
             },
             dismissButton = {

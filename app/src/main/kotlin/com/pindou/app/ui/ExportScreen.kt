@@ -170,11 +170,6 @@ fun ExportScreen(controller: PindouController) {
             )
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    modifier = Modifier.weight(1f),
-                    enabled = !controller.busy,
-                    onClick = { saveWithLegacyPermission { controller.exportPindou(share = false) } },
-                ) { Text("保存 .pindou") }
                 OutlinedButton(
                     modifier = Modifier.weight(1f),
                     enabled = !controller.busy,

@@ -33,6 +33,7 @@ fun PindouApp(pendingUri: MutableState<Uri?>) {
     Surface(modifier = Modifier.fillMaxSize()) {
         when (controller.screen) {
             Screen.Home -> HomeScreen(controller)
+            Screen.History -> HistoryScreen(controller)
             Screen.Crop -> CropScreen(controller)
             Screen.Editor -> EditorScreen(controller)
             Screen.Export -> ExportScreen(controller)

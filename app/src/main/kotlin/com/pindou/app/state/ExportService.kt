@@ -86,7 +86,12 @@ class ExportService(
         }
     }
 
-    fun exportPindou(project: PindouProject?, share: Boolean, onSaved: (() -> Unit)? = null) {
+    fun exportPindou(
+        project: PindouProject?,
+        share: Boolean,
+        includeReference: Boolean = this.includeReference,
+        onSaved: (() -> Unit)? = null,
+    ) {
         val p = project ?: return
         if (!share && !storagePermissionOk()) {
             nav.showError("需要「存储」权限才能保存到文档目录，请在系统设置中开启")
@@ -100,12 +105,12 @@ class ExportService(
             try {
                 if (share) {
                     val file = withContext(Dispatchers.IO) {
-                        exportManager.saveProject(toSave, baseName(p))
+                        exportManager.saveProject(toSave, pindouBaseName(p))
                     }
                     exportManager.share(file, ExportManager.MIME_PINDOU, "分享交互图纸")
                 } else {
                     val uri = withContext(Dispatchers.IO) {
-                        exportManager.saveProjectToDocuments(toSave, baseName(p))
+                        exportManager.saveProjectToDocuments(toSave, pindouBaseName(p))
                     }
                     nav.setStatus("已保存到 文档/PindouAssistant/${uri.lastPathSegment ?: ""}")
                     onSaved?.invoke()
@@ -127,6 +132,12 @@ class ExportService(
 
     private fun baseName(p: PindouProject): String {
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        return "pindou_${p.grid.width}x${p.grid.height}_$stamp"
+    }
+
+    /** Stable name derived from the project's creation time so re-saving overwrites the same file. */
+    private fun pindouBaseName(p: PindouProject): String {
+        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date(p.meta.createdAt))
         return "pindou_${p.grid.width}x${p.grid.height}_$stamp"
     }
 }

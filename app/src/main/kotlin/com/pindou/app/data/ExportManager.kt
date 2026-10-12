@@ -1,5 +1,6 @@
 package com.pindou.app.data
 
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -82,8 +83,16 @@ class ExportManager(private val context: Context) {
     fun saveProjectToDocuments(project: PindouProject, baseName: String): Uri {
         if (Build.VERSION.SDK_INT >= 29) {
             val resolver = context.contentResolver
+            val displayName = "$baseName.pindou"
+            val existing = findDocument(displayName)
+            if (existing != null) {
+                resolver.openOutputStream(existing, "wt")?.use {
+                    it.write(ProjectSerializer.encode(project).toByteArray(Charsets.UTF_8))
+                } ?: throw IOException("无法覆盖文档内容")
+                return existing
+            }
             val values = ContentValues().apply {
-                put(MediaStore.Files.FileColumns.DISPLAY_NAME, "$baseName.pindou")
+                put(MediaStore.Files.FileColumns.DISPLAY_NAME, displayName)
                 put(MediaStore.Files.FileColumns.MIME_TYPE, MIME_PINDOU)
                 put(MediaStore.Files.FileColumns.RELATIVE_PATH, documentsRelativePath)
                 put(MediaStore.Files.FileColumns.IS_PENDING, 1)
@@ -109,6 +118,21 @@ class ExportManager(private val context: Context) {
         val file = File(dir, "$baseName.pindou")
         file.writeText(ProjectSerializer.encode(project))
         return Uri.fromFile(file)
+    }
+
+    /** Finds an already-saved `.pindou` with [displayName] in [documentsRelativePath] so re-saves overwrite it. */
+    private fun findDocument(displayName: String): Uri? {
+        val resolver = context.contentResolver
+        val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val selection = "${MediaStore.Files.FileColumns.RELATIVE_PATH} LIKE ? AND " +
+            "${MediaStore.Files.FileColumns.DISPLAY_NAME}=?"
+        val args = arrayOf("%$documentsRelativePath%", displayName)
+        resolver.query(collection, arrayOf(MediaStore.Files.FileColumns._ID), selection, args, null)?.use { c ->
+            if (c.moveToFirst()) {
+                return ContentUris.withAppendedId(collection, c.getLong(0))
+            }
+        }
+        return null
     }
 
     /** A cache file the camera can write into; shared via FileProvider. */
