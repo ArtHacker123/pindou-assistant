@@ -1,24 +1,16 @@
 package com.pindou.core.generate
 
 import com.pindou.core.TestPalettes
+import com.pindou.core.imaging.ImageType
+import com.pindou.core.imaging.ReferenceBuilder
 import com.pindou.core.model.PixelImage
-import com.pindou.core.processor.ImageProcessor
-import com.pindou.core.processor.ImageProcessorRegistry
-import com.pindou.core.processor.ImageType
+import com.pindou.core.model.toReferenceGrid
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PatternGeneratorTest {
-
-    private val noOpProcessors = ImageProcessorRegistry(
-        listOf(object : ImageProcessor {
-            override val id = ImageType.CARTOON.id
-            override val displayName = "noop"
-            override fun process(image: PixelImage) = image
-        })
-    )
 
     /** Two vertical color bands: white then red. */
     private fun bandsImage(): PixelImage {
@@ -36,7 +28,7 @@ class PatternGeneratorTest {
 
     @Test
     fun `maps each band to its bead color`() {
-        val generator = PatternGenerator(processors = noOpProcessors)
+        val generator = PatternGenerator()
         val project = generator.generate(
             bandsImage(),
             GenerateConfig(
@@ -56,7 +48,7 @@ class PatternGeneratorTest {
 
     @Test
     fun `paletteUsed is ordered naturally and bounded by N`() {
-        val generator = PatternGenerator(processors = noOpProcessors)
+        val generator = PatternGenerator()
         val project = generator.generate(
             bandsImage(),
             GenerateConfig(
@@ -74,7 +66,7 @@ class PatternGeneratorTest {
 
     @Test
     fun `is reproducible for the same seed`() {
-        val generator = PatternGenerator(processors = noOpProcessors)
+        val generator = PatternGenerator()
         val config = GenerateConfig(
             gridWidth = 8,
             gridHeight = 8,
@@ -89,7 +81,7 @@ class PatternGeneratorTest {
 
     @Test
     fun `rejects oversized grids`() {
-        val generator = PatternGenerator(processors = noOpProcessors)
+        val generator = PatternGenerator()
         assertThrows(IllegalArgumentException::class.java) {
             generator.generate(
                 bandsImage(),
@@ -114,7 +106,7 @@ class PatternGeneratorTest {
                 pixels[y * width + x] = if (x < width / 2) 0x00000000 else 0xFFFF0000.toInt()
             }
         }
-        val generator = PatternGenerator(processors = noOpProcessors)
+        val generator = PatternGenerator()
         val project = generator.generate(
             PixelImage(width, height, pixels),
             GenerateConfig(
@@ -134,7 +126,7 @@ class PatternGeneratorTest {
 
     @Test
     fun `stores generation context in meta`() {
-        val generator = PatternGenerator(processors = noOpProcessors)
+        val generator = PatternGenerator()
         val project = generator.generate(
             bandsImage(),
             GenerateConfig(
@@ -157,7 +149,7 @@ class PatternGeneratorTest {
 
     @Test
     fun `emits a grid-sized reference image`() {
-        val generator = PatternGenerator(processors = noOpProcessors)
+        val generator = PatternGenerator()
         val project = generator.generate(
             bandsImage(),
             GenerateConfig(
@@ -179,7 +171,7 @@ class PatternGeneratorTest {
     fun `reference averages black and white in linear light`() {
         // A single cell covering an equal mix of black and white.
         val image = PixelImage(2, 1, intArrayOf(0xFF000000.toInt(), 0xFFFFFFFF.toInt()))
-        val generator = PatternGenerator(processors = noOpProcessors)
+        val generator = PatternGenerator()
         val project = generator.generate(
             image,
             GenerateConfig(
@@ -207,7 +199,7 @@ class PatternGeneratorTest {
                 pixels[y * width + x] = if (x < width / 2) 0x00000000 else 0xFFFF0000.toInt()
             }
         }
-        val generator = PatternGenerator(processors = noOpProcessors)
+        val generator = PatternGenerator()
         val project = generator.generate(
             PixelImage(width, height, pixels),
             GenerateConfig(
@@ -226,7 +218,7 @@ class PatternGeneratorTest {
 
     @Test
     fun `reuses a provided reference and yields the same grid`() {
-        val generator = PatternGenerator(processors = noOpProcessors)
+        val generator = PatternGenerator()
         val config = GenerateConfig(
             gridWidth = 8,
             gridHeight = 8,
@@ -240,5 +232,50 @@ class PatternGeneratorTest {
 
         assertEquals(fresh.grid.cells, reused.grid.cells)
         assertEquals(fresh.referenceGrid, reused.referenceGrid)
+    }
+
+    @Test
+    fun `attached reference matches ReferenceBuilder output`() {
+        // No-op processor so the reference is built from the raw working image.
+        val generator = PatternGenerator()
+        val config = GenerateConfig(
+            gridWidth = 2,
+            gridHeight = 2,
+            palette = TestPalettes.basic(),
+            colorCountTarget = 2,
+            imageType = ImageType.CARTOON,
+            seed = 1,
+        )
+        val image = bandsImage()
+        val project = generator.generate(image, config)
+
+        val expected = ReferenceBuilder.build(image, config.gridWidth, config.gridHeight).toReferenceGrid()
+        assertEquals(expected, project.referenceGrid)
+    }
+
+    @Test
+    fun `attached reference matches ReferenceBuilder output with holes`() {
+        val width = 4
+        val height = 2
+        val pixels = IntArray(width * height)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                pixels[y * width + x] = if (x < width / 2) 0x00000000 else 0xFFFF0000.toInt()
+            }
+        }
+        val image = PixelImage(width, height, pixels)
+        val generator = PatternGenerator()
+        val config = GenerateConfig(
+            gridWidth = 2,
+            gridHeight = 1,
+            palette = TestPalettes.basic(),
+            colorCountTarget = 2,
+            imageType = ImageType.CARTOON,
+            seed = 1,
+        )
+        val project = generator.generate(image, config)
+
+        val expected = ReferenceBuilder.build(image, config.gridWidth, config.gridHeight).toReferenceGrid()
+        assertEquals(expected, project.referenceGrid)
     }
 }

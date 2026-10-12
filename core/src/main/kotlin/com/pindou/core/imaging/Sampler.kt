@@ -1,4 +1,4 @@
-package com.pindou.core.sampler
+package com.pindou.core.imaging
 
 import com.pindou.core.model.PixelImage
 import com.pindou.core.model.Rgb

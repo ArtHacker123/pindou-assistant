@@ -1,0 +1,131 @@
+package com.pindou.app.state
+
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.os.Build
+import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.pindou.app.ExportSize
+import com.pindou.app.data.ExportManager
+import com.pindou.app.render.Form1BitmapRenderer
+import com.pindou.core.model.PindouProject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/**
+ * Renders the print PNG, writes the `.pindou` payload, and shares/saves either.
+ * Owns the export options ([exportSize], [includeReference]) and reports busy /
+ * status / errors through [NavigationState].
+ */
+class ExportService(
+    private val context: Context,
+    private val scope: CoroutineScope,
+    private val nav: NavigationState,
+) {
+
+    private val TAG = "ExportService"
+    private val exportManager = ExportManager(context)
+
+    var exportSize by mutableStateOf(ExportSize.A4)
+    var includeReference by mutableStateOf(true)
+
+    fun renderForm1(project: PindouProject?, cellSize: Int? = null): Bitmap? {
+        val p = project ?: return null
+        return Form1BitmapRenderer.render(p, cellSize ?: resolvedExportCellSize(p))
+    }
+
+    /** Resolves the chosen export size to px/cell and the resulting PNG dimensions. */
+    fun resolvedExportPlan(p: PindouProject): Form1BitmapRenderer.ExportPlan =
+        when (exportSize) {
+            ExportSize.A4 -> Form1BitmapRenderer.fitToA4(p)
+            ExportSize.P1080 -> Form1BitmapRenderer.fitToWidth(p, 1920)
+            ExportSize.UHD4K -> Form1BitmapRenderer.fitToWidth(p, 3840)
+            ExportSize.MAX -> Form1BitmapRenderer.fitMax(p)
+        }
+
+    fun resolvedExportCellSize(p: PindouProject): Int = resolvedExportPlan(p).cellOutPx
+
+    fun exportPng(project: PindouProject?, share: Boolean) {
+        val p = project ?: return
+        if (!share && !storagePermissionOk()) {
+            nav.showError("需要「存储」权限才能保存到相册，请在系统设置中开启")
+            return
+        }
+        nav.markBusy(true)
+        nav.clearError()
+        scope.launch {
+            try {
+                if (share) {
+                    val file = withContext(Dispatchers.Default) {
+                        val bitmap = Form1BitmapRenderer.render(p, resolvedExportCellSize(p))
+                        exportManager.savePng(bitmap, baseName(p))
+                    }
+                    exportManager.share(file, ExportManager.MIME_PNG, "分享拼豆图纸")
+                } else {
+                    withContext(Dispatchers.Default) {
+                        val bitmap = Form1BitmapRenderer.render(p, resolvedExportCellSize(p))
+                        exportManager.savePngToGallery(bitmap, baseName(p))
+                    }
+                    nav.setStatus("已保存到系统相册（Pictures/PindouAssistant）")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "exportPng failed", e)
+                nav.showError(e.message ?: "导出失败")
+            } finally {
+                nav.markBusy(false)
+            }
+        }
+    }
+
+    fun exportPindou(project: PindouProject?, share: Boolean) {
+        val p = project ?: return
+        if (!share && !storagePermissionOk()) {
+            nav.showError("需要「存储」权限才能保存到文档目录，请在系统设置中开启")
+            return
+        }
+        // Embed the reference image by default; the opt-out strips it for smaller files.
+        val toSave = if (includeReference) p else p.copy(referenceGrid = null)
+        nav.markBusy(true)
+        nav.clearError()
+        scope.launch {
+            try {
+                if (share) {
+                    val file = withContext(Dispatchers.IO) {
+                        exportManager.saveProject(toSave, baseName(p))
+                    }
+                    exportManager.share(file, ExportManager.MIME_PINDOU, "分享交互图纸")
+                } else {
+                    val uri = withContext(Dispatchers.IO) {
+                        exportManager.saveProjectToDocuments(toSave, baseName(p))
+                    }
+                    nav.setStatus("已保存到 文档/PindouAssistant/${uri.lastPathSegment ?: ""}")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "exportPindou failed", e)
+                nav.showError(e.message ?: "导出失败")
+            } finally {
+                nav.markBusy(false)
+            }
+        }
+    }
+
+    private fun storagePermissionOk(): Boolean {
+        if (Build.VERSION.SDK_INT >= 29) return true
+        return context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun baseName(p: PindouProject): String {
+        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        return "pindou_${p.grid.width}x${p.grid.height}_$stamp"
+    }
+}

@@ -52,7 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pindou.app.PindouController
 import com.pindou.core.model.PindouProject
-import com.pindou.core.processor.ImageType
+import com.pindou.core.imaging.ImageType
 
 private val GRID_SIZES = listOf(29, 52, 58, 78, 104, 116, 128)
 private val COLOR_COUNTS = listOf(4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128)

@@ -1,40 +1,24 @@
 package com.pindou.app
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
-import android.os.Build
 import android.util.Log
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import com.pindou.app.data.AssetPaletteProvider
-import com.pindou.app.data.ExportManager
 import com.pindou.app.data.ImageLoader
-import com.pindou.app.data.SourceHasher
 import com.pindou.app.render.Form1BitmapRenderer
-import com.pindou.core.generate.GenerateConfig
-import com.pindou.core.generate.PatternGenerator
+import com.pindou.app.state.DocumentStore
+import com.pindou.app.state.ExportService
+import com.pindou.app.state.GenerationSession
+import com.pindou.app.state.NavigationState
+import com.pindou.app.state.ReferenceService
+import com.pindou.core.imaging.ImageType
 import com.pindou.core.model.Palette
 import com.pindou.core.model.PindouProject
 import com.pindou.core.model.PixelImage
 import com.pindou.core.palette.PaletteMeta
-import com.pindou.core.palette.PaletteRegistry
-import com.pindou.core.processor.ImageType
-import com.pindou.core.serialize.ProjectFormatException
-import com.pindou.core.serialize.ProjectSerializer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /** The screens the app can show. */
 sealed interface Screen {
@@ -45,306 +29,122 @@ sealed interface Screen {
 }
 
 /**
- * Holds all mutable app state and orchestrates loading, generation, export and
- * sharing. Compose observes its `mutableStateOf` properties directly.
+ * Thin facade over the app's state holders and services. Compose observes the
+ * delegated `mutableStateOf` properties directly; the screen composables are
+ * unchanged. Orchestration that spans holders (navigation, document lifecycle)
+ * lives here.
  */
 class PindouController(private val context: Context) {
 
     private val TAG = "PindouController"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val palettes = PaletteRegistry(AssetPaletteProvider(context))
-    private val generator = PatternGenerator()
-    private val exportManager = ExportManager(context)
 
-    val paletteMetas: List<PaletteMeta> = palettes.available()
+    private val nav = NavigationState()
+    private val documents = DocumentStore(context)
+    private val references = ReferenceService()
+    private val generation = GenerationSession(context, scope, documents, nav, references)
+    private val export = ExportService(context, scope, nav)
 
-    var screen by mutableStateOf<Screen>(Screen.Home)
-        private set
-    var originalBitmap by mutableStateOf<Bitmap?>(null)
-        private set
-    var workingImage by mutableStateOf<PixelImage?>(null)
-        private set
-    var project by mutableStateOf<PindouProject?>(null)
-        private set
-    var errorMessage by mutableStateOf<String?>(null)
-        private set
-    var statusMessage by mutableStateOf<String?>(null)
-        private set
-    var busy by mutableStateOf(false)
-        private set
+    // ---- Observed state ---------------------------------------------------
 
-    // Generation parameters (two-way bound by the merged parameter/pattern screen).
-    var imageType by mutableStateOf(ImageType.CARTOON)
-    var paletteName by mutableStateOf(paletteMetas.firstOrNull()?.name)
-    var colorCountAuto by mutableStateOf(true)
-    var colorCountTarget by mutableStateOf(16)
-    var gridWidth by mutableStateOf(52)
-    var gridHeight by mutableStateOf(52)
-    var exportSize by mutableStateOf(ExportSize.A4)
+    val paletteMetas: List<PaletteMeta> get() = generation.paletteMetas
+
+    val screen: Screen get() = nav.screen
+    val originalBitmap: Bitmap? get() = documents.originalBitmap
+    val workingImage: PixelImage? get() = documents.workingImage
+    val project: PindouProject? get() = documents.project
+    val errorMessage: String? get() = nav.errorMessage
+    val statusMessage: String? get() = nav.statusMessage
+    val busy: Boolean get() = nav.busy
+
+    val imageType: ImageType get() = generation.imageType
+    val paletteName: String? get() = generation.paletteName
+    val colorCountAuto: Boolean get() = generation.colorCountAuto
+    val colorCountTarget: Int get() = generation.colorCountTarget
+    val gridWidth: Int get() = generation.gridWidth
+    val gridHeight: Int get() = generation.gridHeight
+
+    var exportSize: ExportSize
+        get() = export.exportSize
+        set(value) { export.exportSize = value }
 
     /** Whether saved/shared `.pindou` files embed the grid reference image (on by default). */
-    var includeReference by mutableStateOf(true)
+    var includeReference: Boolean
+        get() = export.includeReference
+        set(value) { export.includeReference = value }
 
-    private var regenJob: Job? = null
-    private var genSeq = 0
+    fun palette(): Palette? = generation.palette()
 
-    /**
-     * The grid-resolution reference image only depends on the working image, the
-     * image type and the grid size, so it is cached under exactly those inputs
-     * and reused across changes that only affect the color count / palette.
-     */
-    private data class ReferenceKey(
-        val image: PixelImage,
-        val imageType: String,
-        val gridWidth: Int,
-        val gridHeight: Int,
-    )
-    private var referenceKey: ReferenceKey? = null
-    private var cachedReference: PixelImage? = null
-
-    fun palette(): Palette? = paletteName?.let { palettes.load(it) }
-
-    fun showError(message: String) {
-        errorMessage = message
-    }
+    fun showError(message: String) = nav.showError(message)
 
     // ---- Navigation -------------------------------------------------------
 
     fun pickImage(uri: Uri) {
-        errorMessage = null
+        nav.clearError()
         try {
-            originalBitmap = ImageLoader.loadBitmap(context, uri)
-            screen = Screen.Crop
+            documents.setOriginal(ImageLoader.loadBitmap(context, uri))
+            nav.go(Screen.Crop)
         } catch (e: Exception) {
             Log.w(TAG, "pickImage failed for $uri", e)
-            errorMessage = "${e.message ?: "图片导入失败"}"
+            nav.showError("${e.message ?: "图片导入失败"}")
         }
     }
 
     fun backFromCrop() {
-        originalBitmap = null
-        screen = Screen.Home
+        documents.setOriginal(null)
+        nav.go(Screen.Home)
     }
 
     fun onCropConfirmed(cropped: PixelImage) {
-        workingImage = cropped.paddedToSquare()
-        screen = Screen.Editor
-        runGenerate()
+        documents.setWorking(cropped.paddedToSquare())
+        nav.go(Screen.Editor)
+        generation.runGenerate()
     }
 
     fun openProject(parsed: PindouProject) {
-        project = parsed
-        paletteName = parsed.meta.paletteName
-        imageType = ImageType.fromId(parsed.meta.imageType)
-        colorCountAuto = false
-        colorCountTarget = parsed.meta.colorCountTarget
-        gridWidth = parsed.meta.gridWidth
-        gridHeight = parsed.meta.gridHeight
-        screen = Screen.Editor
+        documents.updateProject(parsed)
+        generation.applyFromProject(parsed)
+        nav.go(Screen.Editor)
     }
 
     fun openPindou(uri: Uri) {
         try {
-            val text = context.contentResolver.openInputStream(uri)
-                ?.bufferedReader()?.use { it.readText() }
-                ?: throw ProjectFormatException("无法读取文件")
-            openProject(ProjectSerializer.decode(text))
+            openProject(documents.open(uri))
         } catch (e: Exception) {
             Log.w(TAG, "openPindou failed for $uri", e)
-            errorMessage = e.message ?: "无法打开 .pindou 文件"
+            nav.showError(e.message ?: "无法打开 .pindou 文件")
         }
     }
 
-    fun goEditor() { if (project != null) screen = Screen.Editor }
-    fun goExport() { if (project != null) screen = Screen.Export }
-    fun goHome() { screen = Screen.Home }
-    fun clearError() { errorMessage = null }
-    fun clearStatus() { statusMessage = null }
+    fun goEditor() { if (documents.project != null) nav.go(Screen.Editor) }
+    fun goExport() { if (documents.project != null) nav.go(Screen.Export) }
+    fun goHome() { nav.go(Screen.Home) }
+    fun clearError() = nav.clearError()
+    fun clearStatus() = nav.clearStatus()
 
     // ---- Generation -------------------------------------------------------
 
-    fun updateImageType(type: ImageType) {
-        if (imageType != type) {
-            imageType = type
-            scheduleRegen()
-        }
-    }
+    fun updateImageType(type: ImageType) = generation.updateImageType(type)
+    fun updatePalette(name: String) = generation.updatePalette(name)
+    fun updateGridSize(size: Int) = generation.updateGridSize(size)
+    fun updateColorCountSelection(isAuto: Boolean, count: Int) =
+        generation.updateColorCountSelection(isAuto, count)
 
-    fun updatePalette(name: String) {
-        if (paletteName != name) {
-            paletteName = name
-            scheduleRegen()
-        }
-    }
-
-    fun updateGridSize(size: Int) {
-        if (gridWidth != size || gridHeight != size) {
-            gridWidth = size
-            gridHeight = size
-            scheduleRegen()
-        }
-    }
-
-    fun updateColorCountSelection(isAuto: Boolean, count: Int) {
-        val changed = colorCountAuto != isAuto || colorCountTarget != count
-        colorCountAuto = isAuto
-        colorCountTarget = count
-        if (changed) scheduleRegen()
-    }
-
-    /** Debounced regeneration: coalesces rapid parameter changes. */
-    private fun scheduleRegen() {
-        if (workingImage == null) return
-        regenJob?.cancel()
-        regenJob = scope.launch {
-            delay(250)
-            runGenerate()
-        }
-    }
-
-    fun generate() {
-        if (screen != Screen.Editor) screen = Screen.Editor
-        runGenerate()
-    }
-
-    private fun runGenerate() {
-        val image = workingImage ?: return
-        val palette = palette() ?: return
-        busy = true
-        errorMessage = null
-        val seq = ++genSeq
-        val type = imageType
-        val gw = gridWidth
-        val gh = gridHeight
-        scope.launch {
-            try {
-                val (key, result) = withContext(Dispatchers.Default) {
-                    val newKey = ReferenceKey(image, type.id, gw, gh)
-                    val reuse = if (newKey == referenceKey) cachedReference else null
-                    val hash = SourceHasher.hash(image)
-                    val generated = generator.generate(
-                        image,
-                        GenerateConfig(
-                            gridWidth = gw,
-                            gridHeight = gh,
-                            palette = palette,
-                            colorCountTarget = colorCountTarget,
-                            imageType = type,
-                            seed = hash.hashCode().toLong(),
-                            createdAt = System.currentTimeMillis(),
-                            sourceHash = hash,
-                        ),
-                        reference = reuse,
-                    )
-                    newKey to generated
-                }
-                if (seq == genSeq) {
-                    referenceKey = key
-                    cachedReference = result.referenceGrid?.toImage()
-                    project = result
-                    screen = Screen.Editor
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "generate failed", e)
-                if (seq == genSeq) errorMessage = e.message ?: "生成失败"
-            } finally {
-                if (seq == genSeq) busy = false
-            }
-        }
-    }
+    fun generate() = generation.generate()
 
     // ---- Export & share ---------------------------------------------------
 
-    fun renderForm1(cellSize: Int? = null): Bitmap? {
-        val p = project ?: return null
-        return Form1BitmapRenderer.render(p, cellSize ?: resolvedExportCellSize(p))
-    }
+    fun renderForm1(cellSize: Int? = null): Bitmap? = export.renderForm1(documents.project, cellSize)
 
     /** Resolves the chosen export size to px/cell and the resulting PNG dimensions. */
     fun resolvedExportPlan(p: PindouProject): Form1BitmapRenderer.ExportPlan =
-        when (exportSize) {
-            ExportSize.A4 -> Form1BitmapRenderer.fitToA4(p)
-            ExportSize.P1080 -> Form1BitmapRenderer.fitToWidth(p, 1920)
-            ExportSize.UHD4K -> Form1BitmapRenderer.fitToWidth(p, 3840)
-            ExportSize.MAX -> Form1BitmapRenderer.fitMax(p)
-        }
+        export.resolvedExportPlan(p)
 
-    fun resolvedExportCellSize(p: PindouProject): Int = resolvedExportPlan(p).cellOutPx
+    fun resolvedExportCellSize(p: PindouProject): Int = export.resolvedExportCellSize(p)
 
-    fun exportPng(share: Boolean) {
-        val p = project ?: return
-        if (!share && !storagePermissionOk()) {
-            errorMessage = "需要「存储」权限才能保存到相册，请在系统设置中开启"
-            return
-        }
-        busy = true
-        errorMessage = null
-        scope.launch {
-            try {
-                if (share) {
-                    val file = withContext(Dispatchers.Default) {
-                        val bitmap = Form1BitmapRenderer.render(p, resolvedExportCellSize(p))
-                        exportManager.savePng(bitmap, baseName(p))
-                    }
-                    exportManager.share(file, ExportManager.MIME_PNG, "分享拼豆图纸")
-                } else {
-                    withContext(Dispatchers.Default) {
-                        val bitmap = Form1BitmapRenderer.render(p, resolvedExportCellSize(p))
-                        exportManager.savePngToGallery(bitmap, baseName(p))
-                    }
-                    statusMessage = "已保存到系统相册（Pictures/PindouAssistant）"
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "exportPng failed", e)
-                errorMessage = e.message ?: "导出失败"
-            } finally {
-                busy = false
-            }
-        }
-    }
+    fun exportPng(share: Boolean) = export.exportPng(documents.project, share)
 
-    fun exportPindou(share: Boolean) {
-        val p = project ?: return
-        if (!share && !storagePermissionOk()) {
-            errorMessage = "需要「存储」权限才能保存到文档目录，请在系统设置中开启"
-            return
-        }
-        // Embed the reference image by default; the opt-out strips it for smaller files.
-        val toSave = if (includeReference) p else p.copy(referenceGrid = null)
-        busy = true
-        errorMessage = null
-        scope.launch {
-            try {
-                if (share) {
-                    val file = withContext(Dispatchers.IO) {
-                        exportManager.saveProject(toSave, baseName(p))
-                    }
-                    exportManager.share(file, ExportManager.MIME_PINDOU, "分享交互图纸")
-                } else {
-                    val uri = withContext(Dispatchers.IO) {
-                        exportManager.saveProjectToDocuments(toSave, baseName(p))
-                    }
-                    statusMessage = "已保存到 文档/PindouAssistant/${uri.lastPathSegment ?: ""}"
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "exportPindou failed", e)
-                errorMessage = e.message ?: "导出失败"
-            } finally {
-                busy = false
-            }
-        }
-    }
-
-    private fun storagePermissionOk(): Boolean {
-        if (Build.VERSION.SDK_INT >= 29) return true
-        return context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
-            PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun baseName(p: PindouProject): String {
-        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        return "pindou_${p.grid.width}x${p.grid.height}_$stamp"
-    }
+    fun exportPindou(share: Boolean) = export.exportPindou(documents.project, share)
 }
 
 /** Export size presets: A4 single-page auto-fit, a target output width, or the max the device can hold. */

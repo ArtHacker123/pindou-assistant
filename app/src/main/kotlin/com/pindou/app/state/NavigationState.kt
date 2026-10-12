@@ -1,0 +1,50 @@
+package com.pindou.app.state
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.pindou.app.Screen
+
+/**
+ * Navigation and transient UI state: which screen is showing, the one-shot
+ * error/status dialogs, and the global busy flag. Owned by [com.pindou.app.PindouController]
+ * and handed to the services that need to announce failures or busy periods.
+ */
+class NavigationState {
+
+    var screen by mutableStateOf<Screen>(Screen.Home)
+        private set
+
+    var errorMessage by mutableStateOf<String?>(null)
+        private set
+
+    var statusMessage by mutableStateOf<String?>(null)
+        private set
+
+    var busy by mutableStateOf(false)
+        private set
+
+    fun go(to: Screen) {
+        screen = to
+    }
+
+    fun showError(message: String) {
+        errorMessage = message
+    }
+
+    fun clearError() {
+        errorMessage = null
+    }
+
+    fun setStatus(message: String) {
+        statusMessage = message
+    }
+
+    fun clearStatus() {
+        statusMessage = null
+    }
+
+    fun markBusy(value: Boolean) {
+        busy = value
+    }
+}

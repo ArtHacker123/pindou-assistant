@@ -1,7 +1,7 @@
 package com.pindou.core.generate
 
 import com.pindou.core.model.Palette
-import com.pindou.core.processor.ImageType
+import com.pindou.core.imaging.ImageType
 
 /** All inputs required to turn a working image into a [PindouProject]. */
 data class GenerateConfig(
