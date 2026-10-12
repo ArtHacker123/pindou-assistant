@@ -78,6 +78,7 @@ fun PatternGrid(
     showReference: Boolean = false,
     editMode: Boolean = false,
     moveMode: Boolean = false,
+    dragDraw: Boolean = false,
     onEdit: (row: Int, col: Int) -> Unit = { _, _ -> },
     onEditStart: () -> Unit = {},
     onEditEnd: () -> Unit = {},
@@ -146,7 +147,7 @@ fun PatternGrid(
     Canvas(
         modifier = modifier
             .onSizeChanged { container = it }
-            .pointerInput(editMode, moveMode, grid.width, grid.height) {
+            .pointerInput(editMode, moveMode, dragDraw, grid.width, grid.height) {
                 val touchSlop = viewConfiguration.touchSlop
                 val panSlop = touchSlop * 1.6f
                 awaitEachGesture {
@@ -163,13 +164,19 @@ fun PatternGrid(
                         return@awaitEachGesture
                     }
 
-                    var drawing = editMode && !moveMode
+                    // Whether this gesture may edit cells at all (edit mode, not
+                    // the move tool). `drawing` flips on only after the gesture is
+                    // classified as a one-finger draw, so a two-finger pan never
+                    // touches the grid.
+                    val canDraw = editMode && !moveMode
+                    var drawing = false
                     var strokeStarted = false
                     var lastEdit = -1
                     var panAccum = Offset.Zero
                     var zoomAccum = 1f
                     var pastSlop = false
                     var canceled = false
+                    val downPos = down.position
                     var cursorRow = Int.MIN_VALUE
                     var cursorCol = Int.MIN_VALUE
 
@@ -197,6 +204,13 @@ fun PatternGrid(
                         }
                     }
 
+                    fun endStroke() {
+                        if (strokeStarted) {
+                            strokeStarted = false
+                            onEditEnd()
+                        }
+                    }
+
                     fun markCursor(position: Offset) {
                         val cell = cellAt(position)
                         if (cell == null) {
@@ -212,11 +226,9 @@ fun PatternGrid(
                         }
                     }
 
-                    if (drawing) {
-                        startStroke()
-                        editAt(down.position)
-                        markCursor(down.position)
-                    }
+                    // Deliberately no edit on finger-down: a second finger may be
+                    // arriving (pan/zoom), and starting a stroke now would leave a
+                    // stray filled cell. We wait until the gesture is unambiguous.
 
                     while (true) {
                         val event = awaitPointerEvent()
@@ -265,11 +277,15 @@ fun PatternGrid(
                             if (pressedCount > 0) Offset(cx / pressedCount, cy / pressedCount) else null
                         val spanSize = if (spanCount > 0) spanDist / spanCount else 0f
 
-                        // A second finger in edit mode switches from drawing to navigating.
-                        if (drawing && pressedCount >= 2) drawing = false
+                        // A second finger means navigation: finalize any partial
+                        // stroke (keeping what was already drawn) and switch away
+                        // from drawing so no further cell is edited.
+                        if (pressedCount >= 2 && drawing) {
+                            endStroke()
+                            drawing = false
+                        }
 
                         if (drawing) {
-                            startStroke()
                             ch.firstOrNull { it.pressed }?.let {
                                 editAt(it.position)
                                 markCursor(it.position)
@@ -284,10 +300,23 @@ fun PatternGrid(
                                 val zoomMotion = abs(1 - zoomAccum) * spanSize
                                 if (zoomMotion > touchSlop || panAccum.getDistance() > panSlop) {
                                     pastSlop = true
+                                    // Single-finger drag with a painting tool starts a
+                                    // stroke; other tools (bucket/eyedropper) and the
+                                    // move tool just navigate. Paint from the down cell.
+                                    if (canDraw && dragDraw && pressedCount == 1) {
+                                        drawing = true
+                                        startStroke()
+                                        editAt(downPos)
+                                        markCursor(downPos)
+                                        ch.firstOrNull { it.pressed }?.let {
+                                            editAt(it.position)
+                                            markCursor(it.position)
+                                        }
+                                    }
                                 }
                             }
 
-                            if (pastSlop && scale > 0f && centroid != null) {
+                            if (!drawing && pastSlop && scale > 0f && centroid != null) {
                                 if (zoomChange != 1f || panChange != Offset.Zero) {
                                     val newScale = (scale * zoomChange).coerceIn(minScale, maxScale)
                                     val k = newScale / scale
@@ -308,7 +337,13 @@ fun PatternGrid(
                     }
 
                     if (cursorRow != Int.MIN_VALUE) onEditCursor(0, 0, false)
-                    if (strokeStarted) onEditEnd()
+                    endStroke()
+
+                    // A clean one-finger tap (no movement, no second finger) applies
+                    // the active tool once: paint dot, bucket fill, or eyedropper.
+                    if (canDraw && !pastSlop && !canceled && scale > 0f) {
+                        cellAt(downPos)?.let { onEdit(it.first, it.second) }
+                    }
 
                     if (!editMode && !pastSlop && !canceled && scale > 0f) {
                         val col = floor((down.position.x - offset.x) / scale).toInt()

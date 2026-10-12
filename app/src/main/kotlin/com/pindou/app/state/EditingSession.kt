@@ -171,6 +171,9 @@ class EditingSession(
         if (next !== tmp) {
             strokeCells = next.cells.toMutableList()
             strokeDirty = true
+            // Show the change immediately while the stroke is in progress; the
+            // single undo entry is still committed once in endStroke().
+            if (wasInStroke) documents.replaceGrid(next)
         }
         if (!wasInStroke) endStroke()
         else refreshHistory()

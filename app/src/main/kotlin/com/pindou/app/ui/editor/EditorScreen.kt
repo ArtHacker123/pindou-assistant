@@ -246,6 +246,7 @@ fun EditorScreen(controller: PindouController) {
                         showReference = if (peeking) true else showReference,
                         editMode = editMode,
                         moveMode = controller.editTool == EditTool.MOVE,
+                        dragDraw = controller.editTool == EditTool.PAINT || controller.editTool == EditTool.ERASE,
                         onEdit = { row, col -> controller.applyEdit(row, col, peeking) },
                         onEditStart = { controller.beginStroke() },
                         onEditEnd = { controller.endStroke() },
