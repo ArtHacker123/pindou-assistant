@@ -64,6 +64,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
@@ -71,10 +72,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.pindou.app.PindouController
 import com.pindou.app.R
@@ -114,7 +117,22 @@ fun EditorScreen(controller: PindouController) {
     var pendingRegen by remember { mutableStateOf<(() -> Unit)?>(null) }
     var paletteOpen by remember { mutableStateOf(false) }
     var toolbarOffset by remember { mutableStateOf(Offset.Zero) }
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    var toolbarSize by remember { mutableStateOf(IntSize.Zero) }
     var confirmLeave by remember { mutableStateOf(false) }
+
+    // Keep the floating toolbar inside the canvas: the CenterEnd anchor plus the
+    // drag offset is clamped so the whole dock stays within the viewport.
+    val clampToolbarOffset: (Offset) -> Offset = { next ->
+        val maxX = (canvasSize.width - toolbarSize.width).coerceAtLeast(0).toFloat()
+        val maxY = (canvasSize.height - toolbarSize.height).coerceAtLeast(0).toFloat()
+        val baseX = (canvasSize.width - toolbarSize.width).toFloat()
+        val baseY = (canvasSize.height - toolbarSize.height) / 2f
+        Offset(
+            (baseX + next.x).coerceIn(0f, maxX) - baseX,
+            (baseY + next.y).coerceIn(0f, maxY) - baseY,
+        )
+    }
 
     val referenceLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent(),
@@ -215,7 +233,8 @@ fun EditorScreen(controller: PindouController) {
                     .fillMaxWidth()
                     .weight(1f)
                     .clipToBounds()
-                    .background(Color(0xFFEEEEEE)),
+                    .background(Color(0xFFEEEEEE))
+                    .onSizeChanged { canvasSize = it },
             ) {
                 if (project != null) {
                     val g = project.grid
@@ -282,10 +301,19 @@ fun EditorScreen(controller: PindouController) {
                     FloatingToolbar(
                         selected = controller.editTool,
                         onSelect = controller::selectEditTool,
-                        onMove = { delta -> toolbarOffset += delta },
+                        canUndo = controller.canUndo,
+                        canRedo = controller.canRedo,
+                        onUndo = { controller.undoEdit() },
+                        onRedo = { controller.redoEdit() },
+                        onMove = { delta -> toolbarOffset = clampToolbarOffset(toolbarOffset + delta) },
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
-                            .offset { IntOffset(toolbarOffset.x.toInt(), toolbarOffset.y.toInt()) },
+                            .offset {
+                                val clamped = clampToolbarOffset(toolbarOffset)
+                                IntOffset(clamped.x.toInt(), clamped.y.toInt())
+                            }
+                            .onSizeChanged { toolbarSize = it }
+                            .alpha(if (toolbarSize == IntSize.Zero) 0f else 1f),
                     )
                 }
             }
@@ -545,9 +573,9 @@ private fun EditTool.icon(): ImageVector = when (this) {
 }
 
 /**
- * The bottom action bar (in edit mode): the move tool, undo/redo, and the
- * current-color swatch that opens the full series picker. The drawing tools
- * live in the draggable [FloatingToolbar] on the canvas.
+ * The bottom action bar (in edit mode): the current-color swatch that opens the
+ * full series picker. All tools and history actions live in the draggable
+ * [FloatingToolbar] on the canvas.
  */
 @Composable
 private fun EditActionBar(controller: PindouController, onOpenPalette: () -> Unit) {
@@ -559,22 +587,6 @@ private fun EditActionBar(controller: PindouController, onOpenPalette: () -> Uni
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        val moveOn = controller.editTool == EditTool.MOVE
-        IconButton(
-            onClick = { controller.selectEditTool(EditTool.MOVE) },
-            modifier = Modifier.background(
-                if (moveOn) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-                RoundedCornerShape(50),
-            ),
-        ) {
-            Icon(Icons.Filled.PanTool, contentDescription = EditTool.MOVE.label)
-        }
-        IconButton(onClick = { controller.undoEdit() }, enabled = controller.canUndo) {
-            Icon(Icons.Filled.Undo, contentDescription = "撤销")
-        }
-        IconButton(onClick = { controller.redoEdit() }, enabled = controller.canRedo) {
-            Icon(Icons.Filled.Redo, contentDescription = "重做")
-        }
         Spacer(Modifier.weight(1f))
         val brush = controller.brushCode
         val rgb = brush?.let { controller.palette()?.item(it)?.rgb }
@@ -598,25 +610,30 @@ private fun EditActionBar(controller: PindouController, onOpenPalette: () -> Uni
 }
 
 /**
- * The floating drawing-tool dock. It sits on top of the canvas and can be
- * dragged to any position: a transparent gesture catcher fills the dock and
- * consumes touches (so the grid below never starts a stroke), while the tool
- * buttons on top still receive taps.
+ * The floating tool dock. It sits on top of the canvas and can be dragged to
+ * any position: a transparent gesture catcher fills the dock and consumes
+ * touches (so the grid below never starts a stroke), while the tool buttons on
+ * top still receive taps. A grip bar at the top makes the drag target obvious.
  */
 @Composable
 private fun FloatingToolbar(
     selected: EditTool,
     onSelect: (EditTool) -> Unit,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
     onMove: (Offset) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val drawTools = listOf(EditTool.PAINT, EditTool.ERASE, EditTool.EYEDROPPER, EditTool.BUCKET)
+    val shape = RoundedCornerShape(10.dp)
     Box(
         modifier = modifier
-            .shadow(4.dp, RoundedCornerShape(14.dp))
-            .clip(RoundedCornerShape(14.dp))
+            .shadow(2.dp, shape)
+            .clip(shape)
             .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, Color(0xCCCCCCCC), RoundedCornerShape(14.dp)),
+            .border(1.dp, Color(0xCCCCCCCC), shape),
     ) {
         Box(
             Modifier
@@ -641,19 +658,74 @@ private fun FloatingToolbar(
             modifier = Modifier.padding(2.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // Drag grip: a non-clickable area so touches fall through to the
+            // catcher below and drag the dock without hitting a tool button.
+            Box(
+                modifier = Modifier
+                    .width(36.dp)
+                    .height(16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 24.dp, height = 3.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50)),
+                )
+            }
+            ToolButton(EditTool.MOVE, selected == EditTool.MOVE) { onSelect(EditTool.MOVE) }
+            HistoryButton(Icons.Filled.Undo, "撤销", canUndo, onUndo)
+            HistoryButton(Icons.Filled.Redo, "重做", canRedo, onRedo)
+            Divider(Modifier.width(24.dp).padding(vertical = 2.dp))
             drawTools.forEach { tool ->
-                val on = selected == tool
-                IconButton(
-                    onClick = { onSelect(tool) },
-                    modifier = Modifier.background(
-                        if (on) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-                        RoundedCornerShape(50),
-                    ),
-                ) {
-                    Icon(tool.icon(), contentDescription = tool.label)
-                }
+                ToolButton(tool, selected == tool) { onSelect(tool) }
             }
         }
+    }
+}
+
+@Composable
+private fun ToolButton(tool: EditTool, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(50))
+            .background(
+                if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                RoundedCornerShape(50),
+            )
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            tool.icon(),
+            contentDescription = tool.label,
+            modifier = Modifier.size(20.dp),
+            tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+            else MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun HistoryButton(
+    icon: ImageVector,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(50))
+            .clickable(enabled = enabled) { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = label,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.38f),
+        )
     }
 }
 
