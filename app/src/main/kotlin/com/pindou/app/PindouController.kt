@@ -86,6 +86,12 @@ class PindouController(private val context: Context) {
     /** True when the project has a source image it can be regenerated from. */
     val hasSource: Boolean get() = documents.workingImage != null
 
+    /** True while the current project is a free creation (started from 自由创作). */
+    val isFreeCreation: Boolean get() = documents.isFreeCreation
+
+    /** Whether the current project has unsaved changes since the last `.pindou` save. */
+    val needsSave: Boolean get() = documents.needsSave
+
     var exportSize: ExportSize
         get() = export.exportSize
         set(value) { export.exportSize = value }
@@ -119,12 +125,15 @@ class PindouController(private val context: Context) {
 
     fun onCropConfirmed(cropped: PixelImage) {
         documents.setWorking(cropped.paddedToSquare())
+        documents.markGenerated()
         nav.go(Screen.Editor)
         generation.runGenerate()
     }
 
     fun openProject(parsed: PindouProject) {
         documents.updateProject(parsed)
+        documents.markSaved()
+        documents.markGenerated()
         editing.clearHistory()
         generation.applyFromProject(parsed)
         nav.go(Screen.Editor)
@@ -213,6 +222,7 @@ class PindouController(private val context: Context) {
         )
         documents.setWorking(null)
         documents.updateProject(PindouProject(meta, palette, emptyList(), grid, referenceGrid = null))
+        documents.markFreeCreation()
         editing.clearHistory()
         generation.applyFree(paletteName, size)
         editing.enter()
@@ -242,7 +252,14 @@ class PindouController(private val context: Context) {
 
     fun exportPng(share: Boolean) = export.exportPng(documents.project, share)
 
-    fun exportPindou(share: Boolean) = export.exportPindou(documents.project, share)
+    fun exportPindou(share: Boolean, onSaved: (() -> Unit)? = null) {
+        export.exportPindou(documents.project, share, onSaved = {
+            if (!share) {
+                documents.markSaved()
+                onSaved?.invoke()
+            }
+        })
+    }
 }
 
 /** Export size presets: A4 single-page auto-fit, a target output width, or the max the device can hold. */

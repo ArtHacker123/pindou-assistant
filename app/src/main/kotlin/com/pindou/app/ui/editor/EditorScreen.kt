@@ -1,5 +1,6 @@
 package com.pindou.app.ui.editor
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -113,6 +114,7 @@ fun EditorScreen(controller: PindouController) {
     var pendingRegen by remember { mutableStateOf<(() -> Unit)?>(null) }
     var paletteOpen by remember { mutableStateOf(false) }
     var toolbarOffset by remember { mutableStateOf(Offset.Zero) }
+    var confirmLeave by remember { mutableStateOf(false) }
 
     val referenceLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent(),
@@ -120,6 +122,14 @@ fun EditorScreen(controller: PindouController) {
 
     fun runOrConfirm(action: () -> Unit) {
         if (controller.edited) pendingRegen = action else action()
+    }
+
+    fun leaveToHome() {
+        if (controller.needsSave) confirmLeave = true else controller.goHome()
+    }
+
+    BackHandler {
+        if (editMode && !controller.isFreeCreation) controller.exitEdit() else leaveToHome()
     }
 
     Scaffold(
@@ -131,7 +141,15 @@ fun EditorScreen(controller: PindouController) {
                     Text(if (dims != null) "$label $dims" else label)
                 },
                 navigationIcon = {
-                    IconButton(onClick = { if (editMode) controller.exitEdit() else controller.goHome() }) {
+                    IconButton(
+                        onClick = {
+                            if (editMode && !controller.isFreeCreation) {
+                                controller.exitEdit()
+                            } else {
+                                leaveToHome()
+                            }
+                        },
+                    ) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
@@ -356,6 +374,26 @@ fun EditorScreen(controller: PindouController) {
 
     if (paletteOpen) {
         PalettePickerDialog(controller) { paletteOpen = false }
+    }
+
+    if (confirmLeave) {
+        AlertDialog(
+            onDismissRequest = { confirmLeave = false },
+            title = { Text("未保存") },
+            text = { Text("当前图纸尚未保存，退出后更改将丢失，是否保存？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmLeave = false
+                    controller.exportPindou(share = false) { controller.goHome() }
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    confirmLeave = false
+                    controller.goHome()
+                }) { Text("不保存") }
+            },
+        )
     }
 }
 

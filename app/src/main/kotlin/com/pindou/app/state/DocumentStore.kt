@@ -36,6 +36,27 @@ class DocumentStore(private val context: Context) {
     var edited by mutableStateOf(false)
         private set
 
+    /** Whether the current project was started from "自由创作" (no source image). */
+    var isFreeCreation by mutableStateOf(false)
+        private set
+
+    /** Whether the project has changes that have not yet been saved to a `.pindou` document. */
+    var needsSave by mutableStateOf(false)
+        private set
+
+    fun markFreeCreation() {
+        isFreeCreation = true
+    }
+
+    fun markGenerated() {
+        isFreeCreation = false
+    }
+
+    /** Records that the current project was just persisted to a `.pindou` document. */
+    fun markSaved() {
+        needsSave = false
+    }
+
     fun setOriginal(bitmap: Bitmap?) {
         originalBitmap = bitmap
     }
@@ -47,6 +68,7 @@ class DocumentStore(private val context: Context) {
     fun updateProject(value: PindouProject?) {
         project = value
         edited = false
+        needsSave = true
     }
 
     /** Replaces the grid in place (an edit), keeping the palette and reference when still aligned. */
@@ -59,6 +81,7 @@ class DocumentStore(private val context: Context) {
             referenceGrid = p.referenceGrid?.takeIf { it.width == grid.width && it.height == grid.height },
         )
         edited = true
+        needsSave = true
     }
 
     /** Replaces the grid and the palette together (a palette remap). */
@@ -77,12 +100,14 @@ class DocumentStore(private val context: Context) {
             referenceGrid = p.referenceGrid?.takeIf { it.width == grid.width && it.height == grid.height },
         )
         edited = true
+        needsSave = true
     }
 
     /** Sets or clears the grid-resolution reference image. */
     fun setReferenceGrid(reference: ReferenceGrid?) {
         val p = project ?: return
         project = p.copy(referenceGrid = reference)
+        needsSave = true
     }
 
     private fun usedItems(palette: Palette, grid: Grid): List<PaletteItem> =

@@ -86,7 +86,7 @@ class ExportService(
         }
     }
 
-    fun exportPindou(project: PindouProject?, share: Boolean) {
+    fun exportPindou(project: PindouProject?, share: Boolean, onSaved: (() -> Unit)? = null) {
         val p = project ?: return
         if (!share && !storagePermissionOk()) {
             nav.showError("需要「存储」权限才能保存到文档目录，请在系统设置中开启")
@@ -108,6 +108,7 @@ class ExportService(
                         exportManager.saveProjectToDocuments(toSave, baseName(p))
                     }
                     nav.setStatus("已保存到 文档/PindouAssistant/${uri.lastPathSegment ?: ""}")
+                    onSaved?.invoke()
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "exportPindou failed", e)
