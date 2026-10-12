@@ -108,7 +108,6 @@ fun EditorScreen(controller: PindouController) {
     var tableExpanded by remember { mutableStateOf(true) }
     var paramsExpanded by remember { mutableStateOf(false) }
     var showPattern by remember { mutableStateOf(true) }
-    var showReference by remember { mutableStateOf(false) }
     var peeking by remember { mutableStateOf(false) }
     val referenceImage = remember(project) { project?.referenceGrid?.toImage() }
 
@@ -226,8 +225,10 @@ fun EditorScreen(controller: PindouController) {
             if (editMode && project != null) {
                 EditActionBar(
                     controller = controller,
+                    referenceAvailable = referenceImage != null,
                     onOpenPalette = { paletteOpen = true },
                     onLoadReference = { referenceLauncher.launch("image/*") },
+                    onToggleReference = { controller.setShowReference(!controller.showReference) },
                 )
             }
 
@@ -265,7 +266,7 @@ fun EditorScreen(controller: PindouController) {
                         modifier = Modifier.fillMaxSize(),
                         reference = referenceImage,
                         showPattern = if (peeking) false else if (editMode) true else showPattern,
-                        showReference = if (peeking) true else showReference,
+                        showReference = if (peeking) true else controller.showReference,
                         editMode = editMode,
                         moveMode = controller.editTool == EditTool.MOVE,
                         dragDraw = controller.editTool == EditTool.PAINT || controller.editTool == EditTool.ERASE,
@@ -333,14 +334,14 @@ fun EditorScreen(controller: PindouController) {
                     name = selectedCode?.let { itemByCode[it]?.name },
                     sameColorCount = selectedCode?.let { counts[it] } ?: 0,
                     referenceAvailable = referenceImage != null,
-                    showReference = showReference,
+                    showReference = controller.showReference,
                     onToggleReference = {
-                        if (!editMode && showReference && !showPattern) showPattern = true
-                        showReference = !showReference
+                        if (!editMode && controller.showReference && !showPattern) showPattern = true
+                        controller.setShowReference(!controller.showReference)
                     },
                     showPattern = showPattern,
                     onTogglePattern = {
-                        if (showPattern && !showReference) showReference = true
+                        if (showPattern && !controller.showReference) controller.setShowReference(true)
                         showPattern = !showPattern
                     },
                     onPeek = { peeking = it },
@@ -576,16 +577,17 @@ private fun EditTool.icon(): ImageVector = when (this) {
 }
 
 /**
- * The bottom action bar (in edit mode): the reference-image entry (only when the
- * project has no source image) and the current-color swatch that opens the full
- * series picker. All tools and history actions live in the draggable
- * [FloatingToolbar] on the canvas.
+ * The bottom action bar (in edit mode): the reference-image entry (import, plus a
+ * show toggle) and the current-color swatch that opens the full series picker.
+ * All tools and history actions live in the draggable [FloatingToolbar].
  */
 @Composable
 private fun EditActionBar(
     controller: PindouController,
+    referenceAvailable: Boolean,
     onOpenPalette: () -> Unit,
     onLoadReference: () -> Unit,
+    onToggleReference: () -> Unit,
 ) {
     Divider()
     Row(
@@ -596,7 +598,19 @@ private fun EditActionBar(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (!controller.hasSource) {
-            TextButton(onClick = onLoadReference) { Text("参考图") }
+            TextButton(onClick = onLoadReference) { Text("导入参考图") }
+        }
+        if (referenceAvailable) {
+            val on = controller.showReference
+            TextButton(
+                onClick = onToggleReference,
+                modifier = Modifier.background(
+                    if (on) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                    RoundedCornerShape(20.dp),
+                ),
+            ) {
+                Text(if (on) "显示参考图 ✓" else "显示参考图")
+            }
         }
         Spacer(Modifier.weight(1f))
         val brush = controller.brushCode
@@ -891,7 +905,7 @@ private fun InfoBar(
             }
         }
 
-        if (referenceAvailable || editMode) {
+        if (referenceAvailable || !editMode) {
             Spacer(Modifier.height(6.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -899,8 +913,8 @@ private fun InfoBar(
             ) {
                 if (!editMode) {
                     CompareChip(label = "图纸", on = showPattern, onClick = onTogglePattern)
+                    CompareChip(label = "参考图", on = showReference, onClick = onToggleReference)
                 }
-                CompareChip(label = "参考图", on = showReference, onClick = onToggleReference)
                 if (referenceAvailable) {
                     PeekChip(onPeek = onPeek)
                 }

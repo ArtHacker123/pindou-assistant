@@ -92,6 +92,11 @@ class PindouController(private val context: Context) {
     /** Whether the current project has unsaved changes since the last `.pindou` save. */
     val needsSave: Boolean get() = documents.needsSave
 
+    /** Whether the grid reference image is shown over the pattern. */
+    val showReference: Boolean get() = nav.showReference
+
+    fun setShowReference(value: Boolean) = nav.updateShowReference(value)
+
     var exportSize: ExportSize
         get() = export.exportSize
         set(value) { export.exportSize = value }
@@ -147,11 +152,13 @@ class PindouController(private val context: Context) {
             CropPurpose.SOURCE -> {
                 documents.setWorking(cropped.paddedToSquare())
                 documents.markGenerated()
+                nav.updateShowReference(false)
                 nav.go(Screen.Editor)
                 generation.runGenerate()
             }
             CropPurpose.REFERENCE -> {
-                editing.loadReference(cropped, generation.imageType)
+                editing.loadReference(cropped.paddedToSquare(), generation.imageType)
+                nav.updateShowReference(true)
                 nav.go(Screen.Editor)
             }
         }
@@ -163,6 +170,7 @@ class PindouController(private val context: Context) {
         documents.markGenerated()
         editing.clearHistory()
         generation.applyFromProject(parsed)
+        nav.updateShowReference(false)
         nav.go(Screen.Editor)
     }
 
@@ -253,6 +261,7 @@ class PindouController(private val context: Context) {
         editing.clearHistory()
         generation.applyFree(paletteName, size)
         editing.enter()
+        nav.updateShowReference(false)
         nav.go(Screen.Editor)
     }
 

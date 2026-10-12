@@ -22,6 +22,14 @@ class NavigationState {
     var cropPurpose by mutableStateOf(CropPurpose.SOURCE)
         private set
 
+    /**
+     * Whether the grid reference image is shown over the pattern. Lives here (not
+     * in the editor composable) so it survives the editor → crop → editor detour
+     * when a reference is imported.
+     */
+    var showReference by mutableStateOf(false)
+        private set
+
     var errorMessage by mutableStateOf<String?>(null)
         private set
 
@@ -37,6 +45,10 @@ class NavigationState {
 
     fun beginCrop(purpose: CropPurpose) {
         cropPurpose = purpose
+    }
+
+    fun updateShowReference(value: Boolean) {
+        showReference = value
     }
 
     fun showError(message: String) {

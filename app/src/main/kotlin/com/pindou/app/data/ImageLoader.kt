@@ -59,7 +59,7 @@ object ImageLoader {
         var sample = 1
         var w = width
         var h = height
-        while (w > maxDimension * 2 || h > maxDimension * 2) {
+        while (w > maxDimension || h > maxDimension) {
             w /= 2
             h /= 2
             sample *= 2
