@@ -5,6 +5,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.pindou.app.Screen
 
+/** What the crop screen produces: the pattern-generation source, or a reference image. */
+enum class CropPurpose { SOURCE, REFERENCE }
+
 /**
  * Navigation and transient UI state: which screen is showing, the one-shot
  * error/status dialogs, and the global busy flag. Owned by [com.pindou.app.PindouController]
@@ -13,6 +16,10 @@ import com.pindou.app.Screen
 class NavigationState {
 
     var screen by mutableStateOf<Screen>(Screen.Home)
+        private set
+
+    /** Why the crop screen was opened; decides what a confirmed crop is used for. */
+    var cropPurpose by mutableStateOf(CropPurpose.SOURCE)
         private set
 
     var errorMessage by mutableStateOf<String?>(null)
@@ -26,6 +33,10 @@ class NavigationState {
 
     fun go(to: Screen) {
         screen = to
+    }
+
+    fun beginCrop(purpose: CropPurpose) {
+        cropPurpose = purpose
     }
 
     fun showError(message: String) {

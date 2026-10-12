@@ -5,9 +5,9 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
 import com.pindou.app.data.ImageLoader
-import com.pindou.app.data.toPixelImage
 import com.pindou.app.render.Form1BitmapRenderer
 import com.pindou.app.state.DocumentStore
+import com.pindou.app.state.CropPurpose
 import com.pindou.app.state.EditTool
 import com.pindou.app.state.EditingSession
 import com.pindou.app.state.ExportService
@@ -111,6 +111,7 @@ class PindouController(private val context: Context) {
         nav.clearError()
         try {
             documents.setOriginal(ImageLoader.loadBitmap(context, uri))
+            nav.beginCrop(CropPurpose.SOURCE)
             nav.go(Screen.Crop)
         } catch (e: Exception) {
             Log.w(TAG, "pickImage failed for $uri", e)
@@ -118,16 +119,42 @@ class PindouController(private val context: Context) {
         }
     }
 
+    /** Picks an image to use as a reference; it goes through the shared crop/scale screen. */
+    fun pickReference(uri: Uri) {
+        nav.clearError()
+        try {
+            documents.setOriginal(ImageLoader.loadBitmap(context, uri))
+            nav.beginCrop(CropPurpose.REFERENCE)
+            nav.go(Screen.Crop)
+        } catch (e: Exception) {
+            Log.w(TAG, "pickReference failed for $uri", e)
+            nav.showError("${e.message ?: "参考图导入失败"}")
+        }
+    }
+
     fun backFromCrop() {
+        val purpose = nav.cropPurpose
         documents.setOriginal(null)
-        nav.go(Screen.Home)
+        nav.beginCrop(CropPurpose.SOURCE)
+        nav.go(if (purpose == CropPurpose.REFERENCE) Screen.Editor else Screen.Home)
     }
 
     fun onCropConfirmed(cropped: PixelImage) {
-        documents.setWorking(cropped.paddedToSquare())
-        documents.markGenerated()
-        nav.go(Screen.Editor)
-        generation.runGenerate()
+        val purpose = nav.cropPurpose
+        documents.setOriginal(null)
+        nav.beginCrop(CropPurpose.SOURCE)
+        when (purpose) {
+            CropPurpose.SOURCE -> {
+                documents.setWorking(cropped.paddedToSquare())
+                documents.markGenerated()
+                nav.go(Screen.Editor)
+                generation.runGenerate()
+            }
+            CropPurpose.REFERENCE -> {
+                editing.loadReference(cropped, generation.imageType)
+                nav.go(Screen.Editor)
+            }
+        }
     }
 
     fun openProject(parsed: PindouProject) {
@@ -227,17 +254,6 @@ class PindouController(private val context: Context) {
         generation.applyFree(paletteName, size)
         editing.enter()
         nav.go(Screen.Editor)
-    }
-
-    /** Loads a reference image and stores its grid-resolution reference on the current project. */
-    fun loadReference(uri: Uri) {
-        try {
-            val image = ImageLoader.loadBitmap(context, uri).toPixelImage()
-            editing.loadReference(image, generation.imageType)
-        } catch (e: Exception) {
-            Log.w(TAG, "loadReference failed for $uri", e)
-            nav.showError(e.message ?: "参考图导入失败")
-        }
     }
 
     // ---- Export & share ---------------------------------------------------

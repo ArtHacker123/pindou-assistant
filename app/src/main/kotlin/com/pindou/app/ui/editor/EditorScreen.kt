@@ -136,7 +136,7 @@ fun EditorScreen(controller: PindouController) {
 
     val referenceLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent(),
-    ) { uri -> uri?.let { controller.loadReference(it) } }
+    ) { uri -> uri?.let { controller.pickReference(it) } }
 
     fun runOrConfirm(action: () -> Unit) {
         if (controller.edited) pendingRegen = action else action()
@@ -188,7 +188,6 @@ fun EditorScreen(controller: PindouController) {
                         )
                     }
                     if (editMode) {
-                        TextButton(onClick = { referenceLauncher.launch("image/*") }) { Text("参考图") }
                         TextButton(onClick = { controller.exitEdit() }) { Text("完成") }
                     } else {
                         TextButton(enabled = project != null, onClick = { controller.enterEdit() }) {
@@ -225,7 +224,11 @@ fun EditorScreen(controller: PindouController) {
             }
 
             if (editMode && project != null) {
-                EditActionBar(controller, onOpenPalette = { paletteOpen = true })
+                EditActionBar(
+                    controller = controller,
+                    onOpenPalette = { paletteOpen = true },
+                    onLoadReference = { referenceLauncher.launch("image/*") },
+                )
             }
 
             Box(
@@ -573,12 +576,17 @@ private fun EditTool.icon(): ImageVector = when (this) {
 }
 
 /**
- * The bottom action bar (in edit mode): the current-color swatch that opens the
- * full series picker. All tools and history actions live in the draggable
+ * The bottom action bar (in edit mode): the reference-image entry (only when the
+ * project has no source image) and the current-color swatch that opens the full
+ * series picker. All tools and history actions live in the draggable
  * [FloatingToolbar] on the canvas.
  */
 @Composable
-private fun EditActionBar(controller: PindouController, onOpenPalette: () -> Unit) {
+private fun EditActionBar(
+    controller: PindouController,
+    onOpenPalette: () -> Unit,
+    onLoadReference: () -> Unit,
+) {
     Divider()
     Row(
         modifier = Modifier
@@ -587,6 +595,9 @@ private fun EditActionBar(controller: PindouController, onOpenPalette: () -> Uni
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        if (!controller.hasSource) {
+            TextButton(onClick = onLoadReference) { Text("参考图") }
+        }
         Spacer(Modifier.weight(1f))
         val brush = controller.brushCode
         val rgb = brush?.let { controller.palette()?.item(it)?.rgb }
