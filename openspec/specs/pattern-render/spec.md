@@ -23,7 +23,7 @@ The interactive view SHALL highlight every cell sharing the selected cell's bead
 - **THEN** the highlight is cleared, regardless of zoom level; this keeps deselection possible while zoomed in and the grid fills the viewport
 
 #### Scenario: Highlight from color table
-- **WHEN** the user taps an item in the collapsible color table
+- **WHEN** the user taps an item in the color table
 - **THEN** all cells of that bead color are highlighted, same as tapping a cell
 
 ### Requirement: Invalid / empty cells carry no bead
@@ -99,21 +99,26 @@ The system SHALL render Form 1 as an offline image containing: 1-based column nu
 - **WHEN** a chosen resolution would exceed the safe bitmap budget (24M pixels total ≈ 96 MB, under Android's ~100 MB single-bitmap draw limit)
 - **THEN** the exporter lowers px/cell so the output stays within budget instead of failing
 
-### Requirement: Collapsible color table
-The interactive view SHALL provide a collapsible color table listing `paletteUsed` entries as color swatches with their codes, supporting horizontal scrolling when the list is long.
-
-#### Scenario: Expand color table
-- **WHEN** the user expands the color table
-- **THEN** all `paletteUsed` entries are reachable by scrolling
-
-#### Scenario: Collapse color table
-- **WHEN** the user collapses the color table
-- **THEN** the grid area gains the reclaimed vertical space
-
 ### Requirement: Map coordinates through viewport transform
 The system SHALL convert touch coordinates to grid cell coordinates by applying the inverse of the current viewport transform (scale + translate), and SHALL ignore taps that fall outside the grid bounds.
 
 #### Scenario: Tap while zoomed
 - **WHEN** the view is zoomed and panned and the user taps a visible cell
 - **THEN** the correct grid cell (row/column) is selected
+
+### Requirement: Color table with size and palette summary
+
+The interactive view SHALL always show a color table listing `paletteUsed` entries as color swatches with their codes, supporting horizontal scrolling when the list is long. The table SHALL NOT be collapsible: it is permanently visible below the canvas and has no expand/collapse control. Above the swatches, the table SHALL show a single left-aligned summary line containing, in order, the grid size (`W×H`), the palette display name, and the number of colors used ("用色 N 种"), separated by `·`.
+
+#### Scenario: Color table is always visible
+- **WHEN** a pattern is displayed
+- **THEN** the color table and its summary line are shown, with no expand/collapse control
+
+#### Scenario: Summary line shows size, palette, and color count
+- **WHEN** a pattern is displayed
+- **THEN** the summary line reads `<W>×<H> · <palette display name> · 用色 <N> 种`, where `N` is the size of `paletteUsed`
+
+#### Scenario: Long color list scrolls
+- **WHEN** `paletteUsed` has more entries than fit on screen
+- **THEN** all entries are reachable by horizontal scrolling
 

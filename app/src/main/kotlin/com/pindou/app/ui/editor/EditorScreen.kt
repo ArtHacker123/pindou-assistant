@@ -107,7 +107,6 @@ fun EditorScreen(controller: PindouController) {
 
     var selectedCode by remember(project) { mutableStateOf<String?>(null) }
     var selectedPos by remember(project) { mutableStateOf<Pair<Int, Int>?>(null) }
-    var tableExpanded by remember { mutableStateOf(true) }
     var paramsExpanded by remember { mutableStateOf(false) }
     var showPattern by remember { mutableStateOf(true) }
     var peeking by remember { mutableStateOf(false) }
@@ -176,9 +175,7 @@ fun EditorScreen(controller: PindouController) {
         topBar = {
             TopAppBar(
                 title = {
-                    val label = if (editMode) "编辑图纸" else "生成图纸"
-                    val dims = grid?.let { "${it.width}×${it.height}" }
-                    Text(if (dims != null) "$label $dims" else label)
+                    Text(if (editMode) "编辑" else "生成")
                 },
                 navigationIcon = {
                     IconButton(
@@ -389,8 +386,6 @@ fun EditorScreen(controller: PindouController) {
                 ColorTablePanel(
                     project = project,
                     selectedCode = if (editMode) controller.brushCode else selectedCode,
-                    expanded = tableExpanded,
-                    onToggle = { tableExpanded = !tableExpanded },
                     onSelect = { if (editMode) controller.selectBrush(it) else selectedCode = it },
                 )
             }
@@ -1003,48 +998,34 @@ private fun FloatingPeekButton(
 private fun ColorTablePanel(
     project: PindouProject,
     selectedCode: String?,
-    expanded: Boolean,
-    onToggle: () -> Unit,
     onSelect: (String) -> Unit,
 ) {
     Divider()
     Column(Modifier.fillMaxWidth().padding(12.dp)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onToggle() },
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "用色 ${project.paletteUsed.size} 种",
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Text(if (expanded) "收起" else "展开", style = MaterialTheme.typography.bodySmall)
-        }
-
-        if (expanded) {
-            Spacer(Modifier.height(8.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(project.paletteUsed, key = { it.code }) { item ->
-                    val selected = item.code == selectedCode
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.clickable { onSelect(item.code) },
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(Color(item.rgb.toArgb()), RoundedCornerShape(6.dp))
-                                .border(
-                                    width = if (selected) 3.dp else 1.dp,
-                                    color = if (selected) Color.Black else Color(0xFF888888),
-                                    shape = RoundedCornerShape(6.dp),
-                                ),
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(item.code, style = MaterialTheme.typography.labelSmall)
-                    }
+        Text(
+            "${project.grid.width}×${project.grid.height} · ${project.paletteSource.displayName} · 用色 ${project.paletteUsed.size} 种",
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Spacer(Modifier.height(8.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(project.paletteUsed, key = { it.code }) { item ->
+                val selected = item.code == selectedCode
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable { onSelect(item.code) },
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color(item.rgb.toArgb()), RoundedCornerShape(6.dp))
+                            .border(
+                                width = if (selected) 3.dp else 1.dp,
+                                color = if (selected) Color.Black else Color(0xFF888888),
+                                shape = RoundedCornerShape(6.dp),
+                            ),
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(item.code, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
