@@ -46,12 +46,20 @@ class ExportManager(private val context: Context) {
         return file
     }
 
-    /** Persists a PNG to the system gallery (visible in the Photos app). */
+    /** Persists a PNG to the system gallery (visible in the Photos app), overwriting a same-name image. */
     fun savePngToGallery(bitmap: Bitmap, baseName: String): Uri {
         if (Build.VERSION.SDK_INT >= 29) {
             val resolver = context.contentResolver
+            val displayName = "$baseName.png"
+            val existing = findGalleryImage(displayName)
+            if (existing != null) {
+                resolver.openOutputStream(existing, "wt")?.use {
+                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) { "PNG 编码失败" }
+                } ?: throw IOException("无法覆盖相册内容")
+                return existing
+            }
             val values = ContentValues().apply {
-                put(MediaStore.Images.Media.DISPLAY_NAME, "$baseName.png")
+                put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
                 put(MediaStore.Images.Media.MIME_TYPE, MIME_PNG)
                 put(MediaStore.Images.Media.RELATIVE_PATH, galleryRelativePath)
                 put(MediaStore.Images.Media.IS_PENDING, 1)
@@ -120,6 +128,47 @@ class ExportManager(private val context: Context) {
         return Uri.fromFile(file)
     }
 
+    /** Whether a `.pindou` named [baseName] already exists in the Documents folder. */
+    fun pindouExists(baseName: String): Boolean {
+        val displayName = "$baseName.pindou"
+        return if (Build.VERSION.SDK_INT >= 29) {
+            findDocument(displayName) != null
+        } else {
+            File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+                displayName,
+            ).exists()
+        }
+    }
+
+    /** Whether a PNG named [baseName] already exists in our gallery folder. */
+    fun pngExists(baseName: String): Boolean {
+        val displayName = "$baseName.png"
+        return if (Build.VERSION.SDK_INT >= 29) {
+            findGalleryImage(displayName) != null
+        } else {
+            File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                displayName,
+            ).exists()
+        }
+    }
+
+    /** Finds an already-saved gallery image with [displayName] so re-saves overwrite it. */
+    private fun findGalleryImage(displayName: String): Uri? {
+        val resolver = context.contentResolver
+        val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val selection = "${MediaStore.Images.Media.RELATIVE_PATH} LIKE ? AND " +
+            "${MediaStore.Images.Media.DISPLAY_NAME}=?"
+        val args = arrayOf("%$galleryRelativePath%", displayName)
+        resolver.query(collection, arrayOf(MediaStore.Images.Media._ID), selection, args, null)?.use { c ->
+            if (c.moveToFirst()) {
+                return ContentUris.withAppendedId(collection, c.getLong(0))
+            }
+        }
+        return null
+    }
+
     /** Finds an already-saved `.pindou` with [displayName] in [documentsRelativePath] so re-saves overwrite it. */
     private fun findDocument(displayName: String): Uri? {
         val resolver = context.contentResolver
@@ -186,5 +235,14 @@ class ExportManager(private val context: Context) {
 
         /** Last-resort wildcard so the share sheet always has targets. */
         const val MIME_ANY = "*/*"
+
+        /** Turns a user-supplied pattern name into a safe file base name (no extension). */
+        fun safeFileName(name: String): String {
+            val cleaned = name.trim()
+                .replace(Regex("""[\\/:*?"<>|\u0000-\u001F]"""), "_")
+                .replace(Regex("""\s+"""), " ")
+                .trim('.', ' ')
+            return cleaned.ifBlank { "拼豆图纸" }.take(60)
+        }
     }
 }

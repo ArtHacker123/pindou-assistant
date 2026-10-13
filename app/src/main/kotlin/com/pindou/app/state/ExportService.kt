@@ -18,9 +18,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * Renders the print PNG, writes the `.pindou` payload, and shares/saves either.
@@ -52,12 +49,13 @@ class ExportService(
 
     fun resolvedExportCellSize(p: PindouProject): Int = resolvedExportPlan(p).cellOutPx
 
-    fun exportPng(project: PindouProject?, share: Boolean) {
+    fun exportPng(project: PindouProject?, share: Boolean, name: String, onSaved: (() -> Unit)? = null) {
         val p = project ?: return
         if (!share && !storagePermissionOk()) {
             nav.showError("需要「存储」权限才能保存到相册，请在系统设置中开启")
             return
         }
+        val base = ExportManager.safeFileName(name)
         nav.markBusy(true)
         nav.clearError()
         scope.launch {
@@ -65,15 +63,16 @@ class ExportService(
                 if (share) {
                     val file = withContext(Dispatchers.Default) {
                         val bitmap = Form1BitmapRenderer.render(p, resolvedExportCellSize(p))
-                        exportManager.savePng(bitmap, baseName(p))
+                        exportManager.savePng(bitmap, base)
                     }
                     exportManager.share(file, ExportManager.MIME_PNG, "分享拼豆图纸")
                 } else {
                     withContext(Dispatchers.Default) {
                         val bitmap = Form1BitmapRenderer.render(p, resolvedExportCellSize(p))
-                        exportManager.savePngToGallery(bitmap, baseName(p))
+                        exportManager.savePngToGallery(bitmap, base)
                     }
                     nav.setStatus("已保存到系统相册（Pictures/PindouAssistant）")
+                    onSaved?.invoke()
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "exportPng failed", e)
@@ -84,9 +83,16 @@ class ExportService(
         }
     }
 
+    /** Whether a `.pindou` named [name] already exists in the Documents folder. */
+    fun pindouExists(name: String): Boolean = exportManager.pindouExists(ExportManager.safeFileName(name))
+
+    /** Whether a PNG named [name] already exists in our gallery folder. */
+    fun pngExists(name: String): Boolean = exportManager.pngExists(ExportManager.safeFileName(name))
+
     fun exportPindou(
         project: PindouProject?,
         share: Boolean,
+        name: String,
         onSaved: (() -> Unit)? = null,
     ) {
         val p = project ?: return
@@ -96,13 +102,14 @@ class ExportService(
         }
         // Always embed the reference image so shared files stay comparable on other devices.
         val toSave = p
+        val base = ExportManager.safeFileName(name)
         nav.markBusy(true)
         nav.clearError()
         scope.launch {
             try {
                 if (share) {
                     val file = withContext(Dispatchers.IO) {
-                        exportManager.saveProject(toSave, pindouBaseName(p))
+                        exportManager.saveProject(toSave, base)
                     }
                     exportManager.share(
                         file,
@@ -112,7 +119,7 @@ class ExportService(
                     )
                 } else {
                     val uri = withContext(Dispatchers.IO) {
-                        exportManager.saveProjectToDocuments(toSave, pindouBaseName(p))
+                        exportManager.saveProjectToDocuments(toSave, base)
                     }
                     nav.setStatus("已保存到 文档/PindouAssistant/${uri.lastPathSegment ?: ""}")
                     onSaved?.invoke()
@@ -154,16 +161,5 @@ class ExportService(
         if (Build.VERSION.SDK_INT >= 29) return true
         return context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
             PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun baseName(p: PindouProject): String {
-        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        return "pindou_${p.grid.width}x${p.grid.height}_$stamp"
-    }
-
-    /** Stable name derived from the project's creation time so re-saving overwrites the same file. */
-    private fun pindouBaseName(p: PindouProject): String {
-        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date(p.meta.createdAt))
-        return "pindou_${p.grid.width}x${p.grid.height}_$stamp"
     }
 }

@@ -4,6 +4,10 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.pindou.app.data.ExportManager
 import com.pindou.app.data.ImageLoader
 import com.pindou.app.data.PatternEntry
 import com.pindou.app.data.PindouTemplate
@@ -102,8 +106,16 @@ class PindouController(private val context: Context) {
     /** Whether the current project has unsaved changes since the last `.pindou` save. */
     val needsSave: Boolean get() = documents.needsSave
 
+    /** Whether the current project already carries a name (so the save prompt can be skipped). */
+    val hasName: Boolean get() = documents.project?.meta?.name?.isNotBlank() == true
+
     /** Whether the current project was opened from an external file (not yet in our Documents). */
     val imported: Boolean get() = documents.imported
+
+    /** A save name that already exists as a different file and awaits an overwrite confirmation. */
+    var overwriteName by mutableStateOf<String?>(null)
+        private set
+    private var overwriteAction: (() -> Unit)? = null
 
     /** True when the grid has no bead at all (nothing to save or export). */
     val projectIsEmpty: Boolean
@@ -191,8 +203,15 @@ class PindouController(private val context: Context) {
     fun openPindou(uri: Uri, external: Boolean = false) {
         val name = documents.displayName(uri)
         try {
-            openProject(documents.open(uri))
+            val parsed = documents.open(uri)
+            openProject(parsed)
             documents.markImported(external)
+            // A file opened from our own Documents is what this project owns, so a re-save won't warn.
+            if (!external && parsed.meta.name.isNotBlank()) {
+                val base = ExportManager.safeFileName(parsed.meta.name)
+                documents.markPindouSaved(base)
+                documents.markPngSaved(base)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "openPindou failed for $uri", e)
             nav.showError(
@@ -292,11 +311,16 @@ class PindouController(private val context: Context) {
                 cells[r * w + c] = mapper.nearestItem(rgb, palette.items).code
             }
         }
-        openBlankProject(palette, Grid(w, h, cells), editMode = false)
+        openBlankProject(palette, Grid(w, h, cells), editMode = false, suggestedName = template.name)
     }
 
     /** Opens a blank (no source image) project, optionally entering edit mode. */
-    private fun openBlankProject(palette: Palette, grid: Grid, editMode: Boolean) {
+    private fun openBlankProject(
+        palette: Palette,
+        grid: Grid,
+        editMode: Boolean,
+        suggestedName: String = "",
+    ) {
         val meta = ProjectMeta(
             gridWidth = grid.width,
             gridHeight = grid.height,
@@ -310,6 +334,7 @@ class PindouController(private val context: Context) {
         documents.updateProject(
             PindouProject(meta, palette, documents.usedItems(palette, grid), grid, referenceGrid = null),
         )
+        documents.markSuggestedName(suggestedName)
         documents.markFreeCreation()
         editing.clearHistory()
         generation.applyFree(palette.name, grid.width)
@@ -328,35 +353,94 @@ class PindouController(private val context: Context) {
 
     fun resolvedExportCellSize(p: PindouProject): Int = export.resolvedExportCellSize(p)
 
-    fun exportPng(share: Boolean) = export.exportPng(documents.project, share)
+    fun exportPng(share: Boolean, name: String) {
+        if (!share && pngNameConflicts(name)) {
+            overwriteName = name
+            overwriteAction = { exportPngConfirmed(share = false, name = name) }
+            return
+        }
+        exportPngConfirmed(share, name)
+    }
 
-    fun exportPindou(share: Boolean, onSaved: (() -> Unit)? = null) {
-        export.exportPindou(documents.project, share, onSaved = {
+    private fun exportPngConfirmed(share: Boolean, name: String) {
+        documents.updateName(name)
+        val base = ExportManager.safeFileName(name)
+        export.exportPng(documents.project, share, name, onSaved = {
+            if (!share) documents.markPngSaved(base)
+        })
+    }
+
+    fun exportPindou(share: Boolean, name: String, onSaved: (() -> Unit)? = null) {
+        if (!share && pindouNameConflicts(name)) {
+            overwriteName = name
+            overwriteAction = { exportPindouConfirmed(share = false, name = name, onSaved = onSaved) }
+            return
+        }
+        exportPindouConfirmed(share, name, onSaved)
+    }
+
+    private fun exportPindouConfirmed(
+        share: Boolean,
+        name: String,
+        onSaved: (() -> Unit)?,
+    ) {
+        documents.updateName(name)
+        val base = ExportManager.safeFileName(name)
+        export.exportPindou(documents.project, share, name, onSaved = {
             if (!share) {
                 documents.markSaved()
+                documents.markPindouSaved(base)
                 history.refresh()
                 onSaved?.invoke()
             }
         })
     }
 
-    /** Copies an externally opened `.pindou` into our Documents folder, regardless of the save flag. */
-    fun importToDocuments() {
-        exportPindou(share = false, onSaved = { documents.markImported(false) })
+    /** True when saving under [name] would overwrite a `.pindou` that belongs to a different file. */
+    fun pindouNameConflicts(name: String): Boolean {
+        val base = ExportManager.safeFileName(name)
+        return documents.ownPindouName != base && export.pindouExists(base)
     }
 
-    /** One-tap save to Documents that always embeds the reference image. */
-    fun saveProject(onSaved: (() -> Unit)? = null) {
-        // Nothing changed since the last save / open: skip the file write and its dialog.
-        if (!documents.needsSave) {
-            onSaved?.invoke()
-            return
-        }
-        export.exportPindou(documents.project, share = false, onSaved = {
-            documents.markSaved()
-            history.refresh()
-            onSaved?.invoke()
-        })
+    /** True when saving a PNG under [name] would overwrite an image that belongs to a different file. */
+    fun pngNameConflicts(name: String): Boolean {
+        val base = ExportManager.safeFileName(name)
+        return documents.ownPngName != base && export.pngExists(base)
+    }
+
+    /** Clears the pending overwrite prompt after the user confirms; runs the guarded save/export. */
+    fun confirmOverwrite() {
+        val action = overwriteAction
+        overwriteName = null
+        overwriteAction = null
+        action?.invoke()
+    }
+
+    /** Clears the pending overwrite prompt after the user cancels; nothing is written. */
+    fun dismissOverwrite() {
+        overwriteName = null
+        overwriteAction = null
+    }
+
+    /** Copies an externally opened `.pindou` into our Documents folder, regardless of the save flag. */
+    fun importToDocuments(name: String) {
+        exportPindou(share = false, name = name, onSaved = { documents.markImported(false) })
+    }
+
+    /** One-tap save to Documents under the chosen [name], embedding the reference image. */
+    fun saveProject(name: String, onSaved: (() -> Unit)? = null) {
+        exportPindou(share = false, name = name, onSaved = onSaved)
+    }
+
+    /** Default name shown in the save dialog: the current name, then a suggestion, then a size default. */
+    fun suggestName(): String {
+        val p = documents.project
+        val existing = p?.meta?.name?.takeIf { it.isNotBlank() }
+        if (existing != null) return existing
+        documents.suggestedName?.let { return it }
+        val w = p?.grid?.width ?: 0
+        val h = p?.grid?.height ?: 0
+        return if (w > 0 && h > 0) "拼豆 $w×$h" else "拼豆图纸"
     }
 }
 

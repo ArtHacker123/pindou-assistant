@@ -81,4 +81,12 @@ fun PindouApp(pendingUri: MutableState<Uri?>) {
             text = { Text(message) },
         )
     }
+
+    controller.overwriteName?.let { name ->
+        OverwriteDialog(
+            name = name,
+            onConfirm = { controller.confirmOverwrite() },
+            onDismiss = { controller.dismissOverwrite() },
+        )
+    }
 }

@@ -76,6 +76,7 @@ fun ExportScreen(controller: PindouController) {
 
     val appContext = LocalContext.current.applicationContext
     var pendingSave by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var pendingName by remember { mutableStateOf<((String) -> Unit)?>(null) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -181,12 +182,26 @@ fun ExportScreen(controller: PindouController) {
                 Button(
                     modifier = Modifier.weight(1f),
                     enabled = !controller.busy,
-                    onClick = { saveWithLegacyPermission { controller.exportPng(share = false) } },
+                    onClick = {
+                        saveWithLegacyPermission {
+                            if (controller.hasName) {
+                                controller.exportPng(share = false, name = controller.suggestName())
+                            } else {
+                                pendingName = { name -> controller.exportPng(share = false, name = name) }
+                            }
+                        }
+                    },
                 ) { Text("保存 PNG") }
                 OutlinedButton(
                     modifier = Modifier.weight(1f),
                     enabled = !controller.busy,
-                    onClick = { controller.exportPindou(share = true) },
+                    onClick = {
+                        if (controller.hasName) {
+                            controller.exportPindou(share = true, name = controller.suggestName())
+                        } else {
+                            pendingName = { name -> controller.exportPindou(share = true, name = name) }
+                        }
+                    },
                 ) { Text("分享图纸") }
             }
 
@@ -204,5 +219,16 @@ fun ExportScreen(controller: PindouController) {
                 Text("返回首页")
             }
         }
+    }
+
+    pendingName?.let { action ->
+        NameDialog(
+            initial = controller.suggestName(),
+            onConfirm = { name ->
+                pendingName = null
+                action(name)
+            },
+            onDismiss = { pendingName = null },
+        )
     }
 }

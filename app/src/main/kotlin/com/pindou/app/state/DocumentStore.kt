@@ -48,6 +48,32 @@ class DocumentStore(private val context: Context) {
     var imported by mutableStateOf(false)
         private set
 
+    /** A transient suggested name (e.g. a template name) used until the project is named or replaced. */
+    var suggestedName by mutableStateOf<String?>(null)
+        private set
+
+    /** Base name of the `.pindou` in Documents that this project owns (null until saved/opened here). */
+    var ownPindouName by mutableStateOf<String?>(null)
+        private set
+
+    /** Base name of the PNG in the gallery that this project owns (null until saved here). */
+    var ownPngName by mutableStateOf<String?>(null)
+        private set
+
+    fun markSuggestedName(name: String?) {
+        suggestedName = name?.takeIf { it.isNotBlank() }
+    }
+
+    /** Records the `.pindou` base name this project is responsible for (so re-saves don't warn). */
+    fun markPindouSaved(baseName: String) {
+        ownPindouName = baseName.takeIf { it.isNotBlank() }
+    }
+
+    /** Records the PNG base name this project is responsible for (so re-saves don't warn). */
+    fun markPngSaved(baseName: String) {
+        ownPngName = baseName.takeIf { it.isNotBlank() }
+    }
+
     /** Records whether the project came from an external file (drives the "save to my patterns" prompt). */
     fun markImported(value: Boolean) {
         imported = value
@@ -79,6 +105,9 @@ class DocumentStore(private val context: Context) {
         edited = false
         needsSave = true
         imported = false
+        suggestedName = null
+        ownPindouName = null
+        ownPngName = null
     }
 
     /** Replaces the grid in place (an edit), keeping the palette and reference when still aligned. */
@@ -119,6 +148,14 @@ class DocumentStore(private val context: Context) {
     fun setReferenceGrid(reference: ReferenceGrid?) {
         val p = project ?: return
         project = p.copy(referenceGrid = reference)
+        needsSave = true
+    }
+
+    /** Applies a user-chosen pattern name (embedded in the next `.pindou` save). */
+    fun updateName(name: String) {
+        val p = project ?: return
+        if (p.meta.name == name) return
+        project = p.copy(meta = p.meta.copy(name = name))
         needsSave = true
     }
 

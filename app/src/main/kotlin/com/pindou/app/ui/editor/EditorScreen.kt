@@ -88,6 +88,7 @@ import androidx.compose.ui.unit.dp
 import com.pindou.app.PindouController
 import com.pindou.app.R
 import com.pindou.app.state.EditTool
+import com.pindou.app.ui.NameDialog
 import com.pindou.core.imaging.ImageType
 import com.pindou.core.model.PindouProject
 import kotlinx.coroutines.launch
@@ -127,6 +128,7 @@ fun EditorScreen(controller: PindouController) {
     var peekSize by remember { mutableStateOf(IntSize.Zero) }
     var confirmLeave by remember { mutableStateOf(false) }
     var pendingEmptyAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var nameContinuation by remember { mutableStateOf<((String) -> Unit)?>(null) }
 
     // Clamp a drag offset so a [size]-sized element anchored at [baseX]/[baseY]
     // stays fully inside the canvas viewport.
@@ -171,6 +173,19 @@ fun EditorScreen(controller: PindouController) {
         if (controller.needsSave && controller.projectIsEmpty) pendingEmptyAction = then else then()
     }
 
+    // Saves under the chosen name: prompt only the first time (when the project has no name yet).
+    fun saveWithName(then: () -> Unit) {
+        if (!controller.needsSave) {
+            then()
+            return
+        }
+        if (controller.hasName) {
+            controller.saveProject(controller.suggestName()) { then() }
+        } else {
+            nameContinuation = { name -> controller.saveProject(name) { then() } }
+        }
+    }
+
     BackHandler {
         if (editMode && !controller.isFreeCreation) controller.exitEdit() else leaveToHome()
     }
@@ -213,12 +228,11 @@ fun EditorScreen(controller: PindouController) {
                     if (editMode) {
                         TextButton(
                             enabled = project != null && !controller.busy,
-                            onClick = { guardEmpty { controller.saveProject() } },
+                            onClick = { guardEmpty { saveWithName { } } },
                         ) { Text("保存") }
                         TextButton(onClick = {
                             guardEmpty {
-                                controller.saveProject()
-                                controller.exitEdit()
+                                saveWithName { controller.exitEdit() }
                             }
                         }) { Text("完成") }
                     } else {
@@ -229,8 +243,7 @@ fun EditorScreen(controller: PindouController) {
                             enabled = project != null && !controller.busy,
                             onClick = {
                                 guardEmpty {
-                                    controller.saveProject()
-                                    controller.goExport()
+                                    saveWithName { controller.goExport() }
                                 }
                             },
                         ) { Text("导出") }
@@ -279,7 +292,13 @@ fun EditorScreen(controller: PindouController) {
                         Spacer(Modifier.width(8.dp))
                         FilledTonalButton(
                             enabled = !controller.busy,
-                            onClick = { controller.importToDocuments() },
+                            onClick = {
+                                if (controller.hasName) {
+                                    controller.importToDocuments(controller.suggestName())
+                                } else {
+                                    nameContinuation = { name -> controller.importToDocuments(name) }
+                                }
+                            },
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                         ) { Text("保存") }
                     }
@@ -498,7 +517,7 @@ fun EditorScreen(controller: PindouController) {
             confirmButton = {
                 TextButton(onClick = {
                     confirmLeave = false
-                    guardEmpty { controller.saveProject { controller.goHome() } }
+                    guardEmpty { saveWithName { controller.goHome() } }
                 }) { Text("保存") }
             },
             dismissButton = {
@@ -522,6 +541,17 @@ fun EditorScreen(controller: PindouController) {
                 }) { Text("继续") }
             },
             dismissButton = { TextButton(onClick = { pendingEmptyAction = null }) { Text("取消") } },
+        )
+    }
+
+    nameContinuation?.let { action ->
+        NameDialog(
+            initial = controller.suggestName(),
+            onConfirm = { name ->
+                nameContinuation = null
+                action(name)
+            },
+            onDismiss = { nameContinuation = null },
         )
     }
 }

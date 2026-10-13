@@ -178,23 +178,33 @@ private fun HistoryCard(
                     }
                 }
             }
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 12.dp, top = 2.dp, bottom = 2.dp, end = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    .padding(start = 12.dp, top = 6.dp, bottom = 6.dp, end = 8.dp),
             ) {
                 Text(
-                    formatDate(entry.timestamp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
+                    entry.title,
+                    style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                CardAction(Icons.Filled.Share, "分享", onShare)
-                CardAction(Icons.Filled.Delete, "删除", onDelete)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        formatDate(entry.timestamp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    CardAction(Icons.Filled.Share, "分享", onShare)
+                    CardAction(Icons.Filled.Delete, "删除", onDelete)
+                }
             }
         }
     }
