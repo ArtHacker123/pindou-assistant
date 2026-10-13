@@ -97,6 +97,9 @@ private val GRID_SIZES = listOf(15, 29, 52, 58, 78, 104, 116, 128)
 private val COLOR_COUNTS = listOf(4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128)
 private const val AUTO_COLOR_COUNT = 16
 
+/** Fixed height of the color-swatch row in [ColorTablePanel] so the bottom panel never resizes. */
+private val SWATCH_ROW_HEIGHT = 60.dp
+
 /**
  * The pattern screen: a view mode (parameter panel + tap-to-highlight Form 2
  * grid, reference compare) and an edit mode (tool bar + direct grid drawing)
@@ -1083,25 +1086,43 @@ private fun ColorTablePanel(
             style = MaterialTheme.typography.titleSmall,
         )
         Spacer(Modifier.height(8.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(project.paletteUsed, key = { it.code }) { item ->
-                val selected = item.code == selectedCode
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.clickable { onSelect(item.code) },
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(SWATCH_ROW_HEIGHT),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (project.paletteUsed.isEmpty()) {
+                Text(
+                    "在图纸上绘制后，用到的颜色会显示在这里",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(Color(item.rgb.toArgb()), RoundedCornerShape(6.dp))
-                            .border(
-                                width = if (selected) 3.dp else 1.dp,
-                                color = if (selected) Color.Black else Color(0xFF888888),
-                                shape = RoundedCornerShape(6.dp),
-                            ),
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(item.code, style = MaterialTheme.typography.labelSmall)
+                    items(project.paletteUsed, key = { it.code }) { item ->
+                        val selected = item.code == selectedCode
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable { onSelect(item.code) },
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(Color(item.rgb.toArgb()), RoundedCornerShape(6.dp))
+                                    .border(
+                                        width = if (selected) 3.dp else 1.dp,
+                                        color = if (selected) Color.Black else Color(0xFF888888),
+                                        shape = RoundedCornerShape(6.dp),
+                                    ),
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(item.code, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
                 }
             }
         }
