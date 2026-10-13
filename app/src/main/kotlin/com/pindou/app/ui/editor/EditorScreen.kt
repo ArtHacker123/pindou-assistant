@@ -119,6 +119,7 @@ fun EditorScreen(controller: PindouController) {
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var toolbarSize by remember { mutableStateOf(IntSize.Zero) }
     var confirmLeave by remember { mutableStateOf(false) }
+    var pendingEmptyAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     // Keep the floating toolbar inside the canvas: the CenterEnd anchor plus the
     // drag offset is clamped so the whole dock stays within the viewport.
@@ -143,6 +144,10 @@ fun EditorScreen(controller: PindouController) {
 
     fun leaveToHome() {
         if (controller.needsSave) confirmLeave = true else controller.goHome()
+    }
+
+    fun guardEmpty(then: () -> Unit) {
+        if (controller.needsSave && controller.projectIsEmpty) pendingEmptyAction = then else then()
     }
 
     BackHandler {
@@ -189,11 +194,13 @@ fun EditorScreen(controller: PindouController) {
                     if (editMode) {
                         TextButton(
                             enabled = project != null && !controller.busy,
-                            onClick = { controller.saveProject() },
+                            onClick = { guardEmpty { controller.saveProject() } },
                         ) { Text("保存") }
                         TextButton(onClick = {
-                            controller.saveProject()
-                            controller.exitEdit()
+                            guardEmpty {
+                                controller.saveProject()
+                                controller.exitEdit()
+                            }
                         }) { Text("完成") }
                     } else {
                         TextButton(enabled = project != null, onClick = { controller.enterEdit() }) {
@@ -202,8 +209,10 @@ fun EditorScreen(controller: PindouController) {
                         TextButton(
                             enabled = project != null && !controller.busy,
                             onClick = {
-                                controller.saveProject()
-                                controller.goExport()
+                                guardEmpty {
+                                    controller.saveProject()
+                                    controller.goExport()
+                                }
                             },
                         ) { Text("导出") }
                     }
@@ -427,7 +436,7 @@ fun EditorScreen(controller: PindouController) {
             confirmButton = {
                 TextButton(onClick = {
                     confirmLeave = false
-                    controller.saveProject { controller.goHome() }
+                    guardEmpty { controller.saveProject { controller.goHome() } }
                 }) { Text("保存") }
             },
             dismissButton = {
@@ -436,6 +445,21 @@ fun EditorScreen(controller: PindouController) {
                     controller.goHome()
                 }) { Text("不保存") }
             },
+        )
+    }
+
+    pendingEmptyAction?.let { action ->
+        AlertDialog(
+            onDismissRequest = { pendingEmptyAction = null },
+            title = { Text("图纸为空") },
+            text = { Text("当前图纸没有任何珠子，为空。是否仍要保存/导出？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingEmptyAction = null
+                    action()
+                }) { Text("继续") }
+            },
+            dismissButton = { TextButton(onClick = { pendingEmptyAction = null }) { Text("取消") } },
         )
     }
 }

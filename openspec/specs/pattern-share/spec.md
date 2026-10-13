@@ -24,6 +24,8 @@ The system SHALL serialize the current project (version, meta, bead palette sour
 
 Saving SHALL be available with one tap from the editor: a `保存` control in edit mode SHALL save directly, and leaving edit mode via `完成` or entering the export screen via `导出` SHALL save the pattern first. Editor-initiated saves SHALL always embed the reference image. Re-saving a pattern SHALL write to the same file name (derived from the project's creation time) and overwrite the existing file rather than inserting a duplicate.
 
+Saving a pattern whose grid contains no beads SHALL ask for confirmation before writing, so an accidentally empty pattern is not persisted silently. When nothing has changed since the last save or open, pressing `保存`, `完成`, or `导出` SHALL NOT write the file again and SHALL NOT show the saved-notification dialog; the flow SHALL proceed directly to its follow-up action (staying in the editor, leaving edit mode, or opening the export screen).
+
 #### Scenario: Save .pindou to Documents
 - **WHEN** the user saves the pattern
 - **THEN** the project is written under the public Documents directory (`Documents/PindouAssistant`) where file managers can find it, and the user is notified of the location
@@ -39,6 +41,14 @@ Saving SHALL be available with one tap from the editor: a `保存` control in ed
 #### Scenario: Repeated saves overwrite the same file
 - **WHEN** the user saves the same pattern more than once
 - **THEN** each save overwrites the previously written `.pindou` file and no duplicate files accumulate
+
+#### Scenario: Empty pattern requires confirmation
+- **WHEN** the user taps `保存`, `完成`, or `导出` for a pattern whose grid has no beads and there are unsaved changes
+- **THEN** a confirmation asks whether the empty file is really intended and the save/export only proceeds on confirmation
+
+#### Scenario: No re-save when nothing changed
+- **WHEN** the user has already saved (or opened) the pattern, makes no further edits, and taps `保存`, `完成`, or `导出` again
+- **THEN** no file is written and no "已保存" dialog is shown, and the flow proceeds directly to its follow-up action
 
 #### Scenario: Share .pindou
 - **WHEN** the user shares the `.pindou` file

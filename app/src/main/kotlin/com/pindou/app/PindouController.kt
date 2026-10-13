@@ -102,6 +102,10 @@ class PindouController(private val context: Context) {
     /** Whether the current project has unsaved changes since the last `.pindou` save. */
     val needsSave: Boolean get() = documents.needsSave
 
+    /** True when the grid has no bead at all (nothing to save or export). */
+    val projectIsEmpty: Boolean
+        get() = documents.project?.grid?.cells?.all { it == null } ?: true
+
     /** Whether the grid reference image is shown over the pattern. */
     val showReference: Boolean get() = nav.showReference
 
@@ -323,6 +327,11 @@ class PindouController(private val context: Context) {
 
     /** One-tap save to Documents that always embeds the reference image. */
     fun saveProject(onSaved: (() -> Unit)? = null) {
+        // Nothing changed since the last save / open: skip the file write and its dialog.
+        if (!documents.needsSave) {
+            onSaved?.invoke()
+            return
+        }
         export.exportPindou(documents.project, share = false, includeReference = true, onSaved = {
             documents.markSaved()
             history.refresh()
