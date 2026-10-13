@@ -249,11 +249,11 @@ In edit mode, all editing tools (move, paint, erase, eyedropper, bucket) and the
 
 ### Requirement: Editor screen title
 
-The editor's top bar SHALL show a short title reflecting the current mode: "生成" in view mode and "编辑" in edit mode. The title SHALL NOT append the grid dimensions (those are shown in the color-table summary line).
+The editor's top bar SHALL show a short title reflecting the current mode: "图纸" in view mode and "编辑" in edit mode. The title SHALL NOT append the grid dimensions (those are shown in the color-table summary line).
 
 #### Scenario: View mode title
 - **WHEN** the editor is in view mode
-- **THEN** the top bar title is "生成"
+- **THEN** the top bar title is "图纸"
 
 #### Scenario: Edit mode title
 - **WHEN** the editor is in edit mode

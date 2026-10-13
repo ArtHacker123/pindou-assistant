@@ -179,7 +179,7 @@ fun EditorScreen(controller: PindouController) {
         topBar = {
             TopAppBar(
                 title = {
-                    Text(if (editMode) "编辑" else "生成")
+                    Text(if (editMode) "编辑" else "图纸")
                 },
                 navigationIcon = {
                     IconButton(
