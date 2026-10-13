@@ -86,7 +86,7 @@ While the user draws in edit mode, the system SHALL highlight the grid cell curr
 While the reference image is shown on its own (the press-and-hold peek temporarily shows only the reference), the eyedropper SHALL sample the reference first — even over an existing bead — so the picked color matches what the user sees. Without a reference image it SHALL fall back to the bead code.
 
 #### Scenario: Pick the visible reference color over a bead
-- **WHEN** the user peeks (holding "按住看原图") and taps a cell that has a bead with the eyedropper
+- **WHEN** the user peeks (holding the "按住看参考图" control) and taps a cell that has a bead with the eyedropper
 - **THEN** the brush color becomes the nearest palette color to that cell's reference pixel, not the bead's code
 
 #### Scenario: Peek without a reference

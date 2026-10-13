@@ -9,7 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +27,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -72,9 +72,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -118,20 +120,36 @@ fun EditorScreen(controller: PindouController) {
     var toolbarOffset by remember { mutableStateOf(Offset.Zero) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var toolbarSize by remember { mutableStateOf(IntSize.Zero) }
+    var peekOffset by remember { mutableStateOf(Offset.Zero) }
+    var peekSize by remember { mutableStateOf(IntSize.Zero) }
     var confirmLeave by remember { mutableStateOf(false) }
     var pendingEmptyAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    // Clamp a drag offset so a [size]-sized element anchored at [baseX]/[baseY]
+    // stays fully inside the canvas viewport.
+    fun clampToCanvas(next: Offset, size: IntSize, baseX: Float, baseY: Float): Offset {
+        val maxX = (canvasSize.width - size.width).coerceAtLeast(0).toFloat()
+        val maxY = (canvasSize.height - size.height).coerceAtLeast(0).toFloat()
+        return Offset(
+            (baseX + next.x).coerceIn(0f, maxX) - baseX,
+            (baseY + next.y).coerceIn(0f, maxY) - baseY,
+        )
+    }
 
     // Keep the floating toolbar inside the canvas: the CenterEnd anchor plus the
     // drag offset is clamped so the whole dock stays within the viewport.
     val clampToolbarOffset: (Offset) -> Offset = { next ->
-        val maxX = (canvasSize.width - toolbarSize.width).coerceAtLeast(0).toFloat()
-        val maxY = (canvasSize.height - toolbarSize.height).coerceAtLeast(0).toFloat()
-        val baseX = (canvasSize.width - toolbarSize.width).toFloat()
-        val baseY = (canvasSize.height - toolbarSize.height) / 2f
-        Offset(
-            (baseX + next.x).coerceIn(0f, maxX) - baseX,
-            (baseY + next.y).coerceIn(0f, maxY) - baseY,
+        clampToCanvas(
+            next,
+            toolbarSize,
+            (canvasSize.width - toolbarSize.width).toFloat(),
+            (canvasSize.height - toolbarSize.height) / 2f,
         )
+    }
+
+    // The peek button is anchored BottomStart.
+    val clampPeekOffset: (Offset) -> Offset = { next ->
+        clampToCanvas(next, peekSize, 0f, (canvasSize.height - peekSize.height).toFloat())
     }
 
     val referenceLauncher = rememberLauncherForActivityResult(
@@ -339,6 +357,21 @@ fun EditorScreen(controller: PindouController) {
                             .alpha(if (toolbarSize == IntSize.Zero) 0f else 1f),
                     )
                 }
+
+                if (referenceImage != null && project != null) {
+                    FloatingPeekButton(
+                        onPeek = { peeking = it },
+                        onMove = { delta -> peekOffset = clampPeekOffset(peekOffset + delta) },
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .offset {
+                                val clamped = clampPeekOffset(peekOffset)
+                                IntOffset(clamped.x.toInt(), clamped.y.toInt())
+                            }
+                            .onSizeChanged { peekSize = it }
+                            .alpha(if (peekSize == IntSize.Zero) 0f else 1f),
+                    )
+                }
             }
 
             if (project != null) {
@@ -352,18 +385,6 @@ fun EditorScreen(controller: PindouController) {
                     selectedPos = selectedPos,
                     name = selectedCode?.let { itemByCode[it]?.name },
                     sameColorCount = selectedCode?.let { counts[it] } ?: 0,
-                    referenceAvailable = referenceImage != null,
-                    showReference = controller.showReference,
-                    onToggleReference = {
-                        if (!editMode && controller.showReference && !showPattern) showPattern = true
-                        controller.setShowReference(!controller.showReference)
-                    },
-                    showPattern = showPattern,
-                    onTogglePattern = {
-                        if (showPattern && !controller.showReference) controller.setShowReference(true)
-                        showPattern = !showPattern
-                    },
-                    onPeek = { peeking = it },
                 )
                 ColorTablePanel(
                     project = project,
@@ -899,12 +920,6 @@ private fun InfoBar(
     selectedPos: Pair<Int, Int>?,
     name: String?,
     sameColorCount: Int,
-    referenceAvailable: Boolean,
-    showReference: Boolean,
-    onToggleReference: () -> Unit,
-    showPattern: Boolean,
-    onTogglePattern: () -> Unit,
-    onPeek: (Boolean) -> Unit,
 ) {
     Divider()
     Column(
@@ -938,56 +953,49 @@ private fun InfoBar(
                 Text("同色 $sameColorCount 粒", style = MaterialTheme.typography.bodyMedium)
             }
         }
-
-        if (referenceAvailable || !editMode) {
-            Spacer(Modifier.height(6.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (!editMode) {
-                    CompareChip(label = "图纸", on = showPattern, onClick = onTogglePattern)
-                    CompareChip(label = "参考图", on = showReference, onClick = onToggleReference)
-                }
-                if (referenceAvailable) {
-                    PeekChip(onPeek = onPeek)
-                }
-            }
-        }
     }
 }
 
 @Composable
-private fun CompareChip(label: String, on: Boolean, onClick: () -> Unit) {
-    TextButton(
-        onClick = onClick,
-        modifier = Modifier.background(
-            if (on) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-            RoundedCornerShape(20.dp),
-        ),
-    ) {
-        Text(if (on) "$label ✓" else label)
-    }
-}
-
-/** A press-and-hold control that temporarily shows the reference only (A/B peek). */
-@Composable
-private fun PeekChip(onPeek: (Boolean) -> Unit) {
+private fun FloatingPeekButton(
+    onPeek: (Boolean) -> Unit,
+    onMove: (Offset) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Box(
-        modifier = Modifier
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp))
+        modifier = modifier
+            .size(54.dp)
+            .shadow(2.dp, CircleShape)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, Color(0xCCCCCCCC), CircleShape)
             .pointerInput(Unit) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
                     onPeek(true)
-                    waitForUpOrCancellation()
+                    var dragging = false
+                    var total = Offset.Zero
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull() ?: break
+                        if (!change.pressed) break
+                        val delta = change.positionChange()
+                        change.consume()
+                        total += delta
+                        if (!dragging && total.getDistance() > viewConfiguration.touchSlop) dragging = true
+                        if (dragging) onMove(delta)
+                    }
                     onPeek(false)
                 }
-            }
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            },
         contentAlignment = Alignment.Center,
     ) {
-        Text("按住看原图", style = MaterialTheme.typography.labelLarge)
+        Text(
+            "按住\n看参考图",
+            style = MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
