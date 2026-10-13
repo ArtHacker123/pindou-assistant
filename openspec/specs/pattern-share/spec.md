@@ -52,7 +52,7 @@ Saving a pattern whose grid contains no beads SHALL ask for confirmation before 
 - **THEN** the app parses it successfully with no reference available and renders the pattern as before, without error
 
 ### Requirement: Open .pindou via VIEW intent for cross-device rendering
-The system SHALL register VIEW intent filters for `.pindou` files covering the custom MIME types, `content`/`file` URIs whose path ends in `.pindou`, and the generic binary MIME `application/octet-stream`, so that files received through messengers (which expose unknown types as `application/octet-stream` content URIs) list 拼豆助手 in the system "打开方式" chooser. Opening a `.pindou` SHALL parse the file and render Form 2 (interactive view with highlight and coordinates) directly from the parsed data. An opened file SHALL be validated, and SHALL be marked as imported (offering to be copied into the app's Documents folder) only when it comes from an external source, not when it is opened from the app's own history or recent list.
+The system SHALL register VIEW intent filters for `.pindou` files covering the custom MIME types, `content`/`file` URIs whose path ends in `.pindou`, and the generic binary MIME `application/octet-stream`, so that files received through messengers (which expose unknown types as `application/octet-stream` content URIs) list 拼豆助手 in the system "打开方式" chooser. Opening a `.pindou` SHALL parse the file and render Form 2 (interactive view with highlight and coordinates) directly from the parsed data. An opened file SHALL be validated, and SHALL be marked as imported (offering to be copied into the app's Documents folder) only when it comes from an external source, not when it is opened from the app's own history or recent list. The import prompt SHALL be dismissed as soon as the project is edited — entering edit mode or changing the pattern settings — because it no longer represents the received file.
 
 #### Scenario: Open from file manager
 - **WHEN** a user opens a `.pindou` file with the app selected
@@ -69,6 +69,10 @@ The system SHALL register VIEW intent filters for `.pindou` files covering the c
 #### Scenario: Imported file offers to save into the app
 - **WHEN** a `.pindou` is opened from an external source
 - **THEN** the editor shows a card ("来自外部的图纸文件" with a 保存 action) and tapping 保存 copies the project into `Documents/PindouAssistant` and refreshes the history, after which the card is hidden
+
+#### Scenario: Import prompt dismissed after editing
+- **WHEN** the user enters edit mode (taps 编辑) or changes the pattern settings of an imported `.pindou`
+- **THEN** the "来自外部的图纸文件" card is hidden, since the project is no longer the pristine received file
 
 #### Scenario: History open does not prompt
 - **WHEN** the user opens a `.pindou` from the app's own history or recent list

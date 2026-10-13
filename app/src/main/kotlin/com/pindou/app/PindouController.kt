@@ -224,7 +224,11 @@ class PindouController(private val context: Context) {
 
     // ---- Editing ----------------------------------------------------------
 
-    fun enterEdit() = editing.enter()
+    /** Enters edit mode; the project is no longer the pristine imported file, so drop the import prompt. */
+    fun enterEdit() {
+        documents.markImported(false)
+        editing.enter()
+    }
 
     fun exitEdit() = editing.exit()
     fun selectEditTool(tool: EditTool) = editing.selectTool(tool)

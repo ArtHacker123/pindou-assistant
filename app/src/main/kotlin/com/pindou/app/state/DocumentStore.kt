@@ -92,6 +92,7 @@ class DocumentStore(private val context: Context) {
         )
         edited = true
         needsSave = true
+        imported = false
     }
 
     /** Replaces the grid and the palette together (a palette remap). */
@@ -111,6 +112,7 @@ class DocumentStore(private val context: Context) {
         )
         edited = true
         needsSave = true
+        imported = false
     }
 
     /** Sets or clears the grid-resolution reference image. */
