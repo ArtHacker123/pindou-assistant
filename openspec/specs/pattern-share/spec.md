@@ -3,24 +3,9 @@
 ## Purpose
 TBD - created by archiving change pindou-android-pattern. Update Purpose after archive.
 ## Requirements
-### Requirement: Export and share Form 1 as PNG
-The system SHALL save the exported Form 1 PNG to the system gallery (visible in the Photos app) and SHALL allow sharing that PNG through the system share sheet via a content URI (FileProvider). On Android 10+ (API 29+) saving SHALL use `MediaStore.Images` under `Pictures/PindouAssistant` with no storage permission; on older versions (API 24–28) it SHALL write to the public Pictures directory and request `WRITE_EXTERNAL_STORAGE`.
-
-#### Scenario: Save PNG to gallery (API 29+)
-- **WHEN** the user taps "保存 PNG"
-- **THEN** the rendered Form 1 image is inserted into `MediaStore.Images` (`Pictures/PindouAssistant`), appears in the system gallery, and the user is notified it was saved, with no runtime permission prompt
-
-#### Scenario: Save PNG on legacy Android (API < 29)
-- **WHEN** the user taps "保存 PNG" without storage permission on an older device
-- **THEN** the app requests `WRITE_EXTERNAL_STORAGE` and, once granted, writes the PNG to the public Pictures directory
-
-#### Scenario: Share PNG
-- **WHEN** the user shares the exported PNG
-- **THEN** the system share sheet opens with the image attached via a FileProvider content URI
-
 ### Requirement: Export and share .pindou project file
 
-The system SHALL serialize the current project (version, meta, bead palette source, paletteUsed, grid of colorCodes, and the grid reference image) to a `.pindou` JSON file, SHALL save it to a user-accessible Documents directory, and SHALL allow sharing that file via the system share sheet. On Android 10+ (API 29+) saving SHALL use `MediaStore.Files` under `Documents/PindouAssistant` (i.e. `/sdcard/Documents/`) with no storage permission; on older versions (API 24–28) it SHALL write to the public Documents directory and require `WRITE_EXTERNAL_STORAGE`. The reference image SHALL be embedded by default and SHALL be omittable via an explicit opt-out.
+The system SHALL serialize the current project (version, meta, bead palette source, paletteUsed, grid of colorCodes, and the grid reference image) to a `.pindou` JSON file, SHALL save it to a user-accessible Documents directory, and SHALL allow sharing that file via the system share sheet. On Android 10+ (API 29+) saving SHALL use `MediaStore.Files` under `Documents/PindouAssistant` (i.e. `/sdcard/Documents/`) with no storage permission; on older versions (API 24–28) it SHALL write to the public Documents directory and require `WRITE_EXTERNAL_STORAGE`. The reference image SHALL always be embedded when present, with no opt-out, so shared files stay comparable on other devices.
 
 Saving SHALL be available with one tap from the editor: a `保存` control in edit mode SHALL save directly, and leaving edit mode via `完成` or entering the export screen via `导出` SHALL save the pattern first. Editor-initiated saves SHALL always embed the reference image. Re-saving a pattern SHALL write to the same file name (derived from the project's creation time) and overwrite the existing file rather than inserting a duplicate.
 
@@ -51,20 +36,16 @@ Saving a pattern whose grid contains no beads SHALL ask for confirmation before 
 - **THEN** no file is written and no "已保存" dialog is shown, and the flow proceeds directly to its follow-up action
 
 #### Scenario: Share .pindou
-- **WHEN** the user shares the `.pindou` file
-- **THEN** the share sheet opens with the file attached via a FileProvider content URI using a custom MIME type (e.g., `application/x-pindou`)
+- **WHEN** the user taps 分享 on the export screen
+- **THEN** the share sheet opens with the `.pindou` file attached via a FileProvider content URI, using a generic binary MIME type (`application/octet-stream`) that falls back to `*/*` when no app can receive binary files; the chooser SHALL be launched with `FLAG_ACTIVITY_NEW_TASK` so it can be started from the application context
 
 #### Scenario: Self-contained payload
 - **WHEN** the `.pindou` file is inspected after export
 - **THEN** it contains the grid, `paletteUsed`, `beadPaletteSource`, and meta (grid size, palette name, colorCountTarget, image type, version) without requiring the original image
 
-#### Scenario: Reference image embedded by default
-- **WHEN** the user saves or shares a `.pindou` without opting out
+#### Scenario: Reference image always embedded
+- **WHEN** the user saves or shares a `.pindou`
 - **THEN** the file contains the grid-resolution reference image, and reopening that file on another device restores the reference for comparison without the original source image
-
-#### Scenario: Reference image omitted on opt-out
-- **WHEN** the user opts out of embedding the reference image when sharing the `.pindou`
-- **THEN** the shared file omits the reference image field (or writes it as null) and remains fully valid
 
 #### Scenario: Older file without a reference image still opens
 - **WHEN** a `.pindou` file that predates this field (no reference image) is opened
@@ -84,4 +65,30 @@ The system SHALL register a VIEW intent filter for `.pindou` files (custom MIME)
 #### Scenario: Corrupt or unsupported file
 - **WHEN** the opened `.pindou` file is malformed or has an unsupported version
 - **THEN** the app shows a clear error message and does not crash
+
+### Requirement: Export Form 1 as PNG to gallery
+The system SHALL save the exported Form 1 PNG to the system gallery (visible in the Photos app). The export screen SHALL NOT expose a direct PNG share action; the user shares the saved image from the system gallery. On Android 10+ (API 29+) saving SHALL use `MediaStore.Images` under `Pictures/PindouAssistant` with no storage permission; on older versions (API 24–28) it SHALL write to the public Pictures directory and request `WRITE_EXTERNAL_STORAGE`.
+
+#### Scenario: Save PNG to gallery (API 29+)
+- **WHEN** the user taps "保存 PNG"
+- **THEN** the rendered Form 1 image is inserted into `MediaStore.Images` (`Pictures/PindouAssistant`), appears in the system gallery, and the user is notified it was saved, with no runtime permission prompt
+
+#### Scenario: Save PNG on legacy Android (API < 29)
+- **WHEN** the user taps "保存 PNG" without storage permission on an older device
+- **THEN** the app requests `WRITE_EXTERNAL_STORAGE` and, once granted, writes the PNG to the public Pictures directory
+
+### Requirement: Export screen layout
+The export screen SHALL present, on a single screen that fits without scrolling: a print preview of Form 1, the output-resolution options, and exactly two primary actions — 保存 PNG (saves the PNG to the system gallery) and 分享 (shares the `.pindou` file, never the PNG). It SHALL also provide a bottom 返回首页 action using a bead-style home icon and a back control that returns to the editor.
+
+#### Scenario: Two primary actions
+- **WHEN** the export screen is shown
+- **THEN** it offers exactly 保存 PNG and 分享: 保存 PNG writes the PNG to the gallery and 分享 shares the `.pindou` project file
+
+#### Scenario: Fits one screen
+- **WHEN** the export screen is shown on a phone
+- **THEN** the preview, the resolution options, and both actions are visible without scrolling
+
+#### Scenario: Return home
+- **WHEN** the user taps the bead-style 返回首页 button
+- **THEN** the app navigates to the home screen
 

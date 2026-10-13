@@ -23,8 +23,8 @@ import java.util.Locale
 
 /**
  * Renders the print PNG, writes the `.pindou` payload, and shares/saves either.
- * Owns the export options ([exportSize], [includeReference]) and reports busy /
- * status / errors through [NavigationState].
+ * Owns the export options ([exportSize]) and reports busy / status / errors
+ * through [NavigationState].
  */
 class ExportService(
     private val context: Context,
@@ -35,8 +35,7 @@ class ExportService(
     private val TAG = "ExportService"
     private val exportManager = ExportManager(context)
 
-    var exportSize by mutableStateOf(ExportSize.A4)
-    var includeReference by mutableStateOf(true)
+    var exportSize by mutableStateOf(ExportSize.MAX)
 
     fun renderForm1(project: PindouProject?, cellSize: Int? = null): Bitmap? {
         val p = project ?: return null
@@ -46,10 +45,8 @@ class ExportService(
     /** Resolves the chosen export size to px/cell and the resulting PNG dimensions. */
     fun resolvedExportPlan(p: PindouProject): Form1BitmapRenderer.ExportPlan =
         when (exportSize) {
-            ExportSize.A4 -> Form1BitmapRenderer.fitToA4(p)
-            ExportSize.P1080 -> Form1BitmapRenderer.fitToWidth(p, 1920)
-            ExportSize.UHD4K -> Form1BitmapRenderer.fitToWidth(p, 3840)
             ExportSize.MAX -> Form1BitmapRenderer.fitMax(p)
+            ExportSize.A4 -> Form1BitmapRenderer.fitToA4(p)
         }
 
     fun resolvedExportCellSize(p: PindouProject): Int = resolvedExportPlan(p).cellOutPx
@@ -89,7 +86,6 @@ class ExportService(
     fun exportPindou(
         project: PindouProject?,
         share: Boolean,
-        includeReference: Boolean = this.includeReference,
         onSaved: (() -> Unit)? = null,
     ) {
         val p = project ?: return
@@ -97,8 +93,8 @@ class ExportService(
             nav.showError("需要「存储」权限才能保存到文档目录，请在系统设置中开启")
             return
         }
-        // Embed the reference image by default; the opt-out strips it for smaller files.
-        val toSave = if (includeReference) p else p.copy(referenceGrid = null)
+        // Always embed the reference image so shared files stay comparable on other devices.
+        val toSave = p
         nav.markBusy(true)
         nav.clearError()
         scope.launch {
@@ -107,7 +103,12 @@ class ExportService(
                     val file = withContext(Dispatchers.IO) {
                         exportManager.saveProject(toSave, pindouBaseName(p))
                     }
-                    exportManager.share(file, ExportManager.MIME_PINDOU, "分享交互图纸")
+                    exportManager.share(
+                        file,
+                        ExportManager.MIME_BINARY,
+                        "分享交互图纸",
+                        ExportManager.MIME_ANY,
+                    )
                 } else {
                     val uri = withContext(Dispatchers.IO) {
                         exportManager.saveProjectToDocuments(toSave, pindouBaseName(p))

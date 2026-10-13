@@ -91,9 +91,9 @@ The system SHALL render Form 1 as an offline image containing: 1-based column nu
 - **WHEN** the user selects the A4 preset
 - **THEN** the exporter computes the largest px/cell whose whole layout (axes + grid + table) fits one A4 page at 300 DPI with 10 mm margins (≈2244×3271 px), and the UI reports the resulting px-per-cell and PNG size
 
-#### Scenario: Resolution presets
-- **WHEN** the user selects a resolution preset
-- **THEN** the exporter targets that output width (1080P ≈ 1920 px, 4K ≈ 3840 px) or the largest size the device can handle ("maximum"), and the UI reports the actual PNG dimensions and px-per-cell
+#### Scenario: Resolution options
+- **WHEN** the user opens the export screen's output-resolution options
+- **THEN** there are exactly two choices — 默认尺寸 (listed first and selected by default, targeting the largest size the device can hold) and A4 自适应 — and the UI reports the resulting PNG dimensions and px-per-cell
 
 #### Scenario: Export pixel budget
 - **WHEN** a chosen resolution would exceed the safe bitmap budget (24M pixels total ≈ 96 MB, under Android's ~100 MB single-bitmap draw limit)

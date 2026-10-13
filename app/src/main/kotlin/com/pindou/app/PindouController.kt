@@ -115,11 +115,6 @@ class PindouController(private val context: Context) {
         get() = export.exportSize
         set(value) { export.exportSize = value }
 
-    /** Whether saved/shared `.pindou` files embed the grid reference image (on by default). */
-    var includeReference: Boolean
-        get() = export.includeReference
-        set(value) { export.includeReference = value }
-
     fun palette(): Palette? = generation.palette()
 
     fun showError(message: String) = nav.showError(message)
@@ -332,7 +327,7 @@ class PindouController(private val context: Context) {
             onSaved?.invoke()
             return
         }
-        export.exportPindou(documents.project, share = false, includeReference = true, onSaved = {
+        export.exportPindou(documents.project, share = false, onSaved = {
             documents.markSaved()
             history.refresh()
             onSaved?.invoke()
@@ -340,10 +335,8 @@ class PindouController(private val context: Context) {
     }
 }
 
-/** Export size presets: A4 single-page auto-fit, a target output width, or the max the device can hold. */
+/** Export size presets: the default (largest size the device can hold) or an A4 single-page auto-fit. */
 enum class ExportSize(val label: String) {
-    A4("A4 整页(自适应)"),
-    P1080("1080P"),
-    UHD4K("4K"),
-    MAX("最大尺寸"),
+    MAX("默认尺寸"),
+    A4("A4 自适应"),
 }

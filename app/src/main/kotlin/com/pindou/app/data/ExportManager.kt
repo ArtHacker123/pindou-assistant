@@ -144,17 +144,36 @@ class ExportManager(private val context: Context) {
 
     fun uriFor(file: File): Uri = FileProvider.getUriForFile(context, authority, file)
 
-    fun share(file: File, mimeType: String, chooserTitle: String) {
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = mimeType
-            putExtra(Intent.EXTRA_STREAM, uriFor(file))
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    fun share(file: File, mimeType: String, chooserTitle: String, fallbackMimeType: String? = null) {
+        val uri = uriFor(file)
+        val send = sendIntent(uri, mimeType)
+        val chosen = if (fallbackMimeType != null &&
+            send.resolveActivity(context.packageManager) == null
+        ) {
+            sendIntent(uri, fallbackMimeType)
+        } else {
+            send
         }
-        context.startActivity(Intent.createChooser(intent, chooserTitle))
+        context.startActivity(
+            Intent.createChooser(chosen, chooserTitle)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+
+    private fun sendIntent(uri: Uri, type: String): Intent = Intent(Intent.ACTION_SEND).apply {
+        this.type = type
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
 
     companion object {
         const val MIME_PNG = "image/png"
         const val MIME_PINDOU = "application/x-pindou"
+
+        /** Generic binary MIME; used when sharing `.pindou` since no app registers the custom type. */
+        const val MIME_BINARY = "application/octet-stream"
+
+        /** Last-resort wildcard so the share sheet always has targets. */
+        const val MIME_ANY = "*/*"
     }
 }
