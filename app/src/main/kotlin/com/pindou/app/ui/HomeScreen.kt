@@ -2,6 +2,7 @@ package com.pindou.app.ui
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -183,7 +184,7 @@ fun HomeScreen(controller: PindouController) {
     var showFreeDialog by remember { mutableStateOf(false) }
 
     val galleryLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { controller.pickImage(it) } }
 
     val cameraLauncher = rememberLauncherForActivityResult(
@@ -216,7 +217,11 @@ fun HomeScreen(controller: PindouController) {
                 palette = GALLERY_PALETTE,
                 containerColor = CARD_BLUE,
                 modifier = Modifier.weight(1f).height(140.dp),
-                onClick = { galleryLauncher.launch("image/*") },
+                onClick = {
+                    galleryLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                },
             )
             ActionCard(
                 title = "拍照生成",

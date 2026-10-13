@@ -4,11 +4,12 @@
 TBD - created by archiving change pindou-android-pattern. Update Purpose after archive.
 ## Requirements
 ### Requirement: Import image from gallery or camera
-The system SHALL allow the user to import an image either from the device gallery or by capturing a new photo with the camera.
+
+The system SHALL import an image either from the device gallery or by capturing a new photo with the camera. Gallery import SHALL open the system photo picker in photo-only mode (a thumbnail grid over the user's photos) rather than a folder-based file browser, so the user picks a photo directly from the preview without navigating folders. Both paths SHALL load the image and proceed to the crop/scale screen.
 
 #### Scenario: Import from gallery
-- **WHEN** the user selects "import from gallery" and picks an image
-- **THEN** the system loads the original image at full available resolution and proceeds to the crop/scale screen
+- **WHEN** the user selects "从相册生成"
+- **THEN** the system photo picker opens in photo-only mode showing a grid of photo thumbnails (not a folder/file browser), and choosing a photo loads the original image at full available resolution and proceeds to the crop/scale screen
 
 #### Scenario: Import from camera
 - **WHEN** the user selects "take photo" and captures an image
