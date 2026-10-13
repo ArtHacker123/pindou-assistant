@@ -242,7 +242,7 @@ fun HomeScreen(controller: PindouController) {
         Spacer(Modifier.height(12.dp))
         WideActionCard(
             title = "自由创作",
-            subtitle = "空白图纸，自己拼",
+            subtitle = "空白图纸，创作你的专属",
             sprite = CREATE_SPRITE,
             palette = CREATE_PALETTE,
             containerColor = CARD_GREEN,
@@ -251,20 +251,7 @@ fun HomeScreen(controller: PindouController) {
 
         Spacer(Modifier.height(32.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("快速模板", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.weight(1f))
-            Text("点一下即可套用", style = MaterialTheme.typography.bodySmall)
-        }
-        Spacer(Modifier.height(8.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(TEMPLATES, key = { it.id }) { template ->
-                TemplateCard(template, onClick = { controller.startTemplateCreation(template) })
-            }
-        }
-
-        Spacer(Modifier.height(32.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("最近图纸", style = MaterialTheme.typography.titleMedium)
+            Text("我的图纸", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.weight(1f))
             TextButton(onClick = { controller.goHistory() }) { Text("查看全部") }
         }
@@ -277,6 +264,19 @@ fun HomeScreen(controller: PindouController) {
             recent.isEmpty() ->
                 EmptyRecentHint()
             else -> RecentGrid(recent) { controller.openPindou(it.uri) }
+        }
+
+        Spacer(Modifier.height(32.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("快速模板", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.weight(1f))
+            Text("点一下即可套用", style = MaterialTheme.typography.bodySmall)
+        }
+        Spacer(Modifier.height(8.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(TEMPLATES, key = { it.id }) { template ->
+                TemplateCard(template, onClick = { controller.startTemplateCreation(template) })
+            }
         }
 
         Spacer(Modifier.height(28.dp))
