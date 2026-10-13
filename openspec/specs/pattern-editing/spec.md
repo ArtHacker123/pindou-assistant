@@ -4,7 +4,7 @@
 TBD - created by archiving change add-pattern-editing. Update Purpose after archive.
 ## Requirements
 ### Requirement: Edit mode over the pattern grid
-The system SHALL provide an edit mode over the same pattern grid, reached from the pattern screen's view mode. Switching to edit mode SHALL keep the project, the viewport, and the reference overlay intact. The "完成" action SHALL return to view mode. Opening an existing pattern — from the home recent list, the history page, or an external `.pindou` — SHALL enter view mode (图纸), never edit mode, regardless of any previous editing session. Free-created projects and templates SHALL open directly in edit mode.
+The system SHALL provide an edit mode over the same pattern grid, reached from the pattern screen's view mode. Switching to edit mode SHALL keep the project, the viewport, and the reference overlay intact. The "完成" action SHALL return to view mode. Opening an existing pattern — from the home recent list, the history page, or an external `.pindou` — SHALL enter view mode (图纸), never edit mode, regardless of any previous editing session. Free-created projects SHALL open directly in edit mode; templates SHALL open in view mode.
 
 #### Scenario: Enter and leave edit mode
 - **WHEN** the user taps "编辑" in view mode

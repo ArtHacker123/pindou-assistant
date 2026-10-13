@@ -274,10 +274,10 @@ class PindouController(private val context: Context) {
     /** Starts a blank pattern (no source image) and opens it directly in edit mode. */
     fun startFreeCreation(paletteName: String, size: Int) {
         val palette = generation.paletteFor(paletteName) ?: return
-        openBlankProject(palette, Grid(size, size, List(size * size) { null }))
+        openBlankProject(palette, Grid(size, size, List(size * size) { null }), editMode = true)
     }
 
-    /** Starts a pattern from a built-in template, keeping the template's own size. */
+    /** Starts a pattern from a built-in template, keeping the template's own size, in view mode. */
     fun startTemplateCreation(template: PindouTemplate) {
         val paletteName = paletteMetas.firstOrNull()?.name ?: return
         val palette = generation.paletteFor(paletteName) ?: return
@@ -291,11 +291,11 @@ class PindouController(private val context: Context) {
                 cells[r * w + c] = mapper.nearestItem(rgb, palette.items).code
             }
         }
-        openBlankProject(palette, Grid(w, h, cells))
+        openBlankProject(palette, Grid(w, h, cells), editMode = false)
     }
 
-    /** Opens a blank (no source image) project in edit mode. */
-    private fun openBlankProject(palette: Palette, grid: Grid) {
+    /** Opens a blank (no source image) project, optionally entering edit mode. */
+    private fun openBlankProject(palette: Palette, grid: Grid, editMode: Boolean) {
         val meta = ProjectMeta(
             gridWidth = grid.width,
             gridHeight = grid.height,
@@ -310,7 +310,7 @@ class PindouController(private val context: Context) {
         documents.markFreeCreation()
         editing.clearHistory()
         generation.applyFree(palette.name, grid.width)
-        editing.enter()
+        if (editMode) editing.enter() else editing.exit()
         nav.updateShowReference(false)
         nav.go(Screen.Editor)
     }
