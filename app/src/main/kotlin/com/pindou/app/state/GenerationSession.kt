@@ -185,6 +185,7 @@ class GenerationSession(
                     referenceKey = key
                     cachedReference = reference
                     documents.updateProject(result)
+                    documents.markCommitted()
                     onRegenerated()
                     nav.go(Screen.Editor)
                 }

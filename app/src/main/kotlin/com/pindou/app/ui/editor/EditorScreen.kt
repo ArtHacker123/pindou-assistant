@@ -168,8 +168,25 @@ fun EditorScreen(controller: PindouController) {
         if (controller.edited) pendingRegen = action else action()
     }
 
-    fun leaveToHome() {
-        if (controller.needsSave) confirmLeave = true else controller.goHome()
+    // Where a confirmed "leave" goes: back to the pattern view when leaving edit mode
+    // of a normal project, otherwise home (free creation or leaving the view itself).
+    var leaveDest by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    fun leaveWithConfirm(dest: () -> Unit) {
+        if (controller.needsSave) {
+            leaveDest = dest
+            confirmLeave = true
+        } else {
+            dest()
+        }
+    }
+
+    fun backFromEditor() {
+        if (editMode && !controller.isFreeCreation) {
+            leaveWithConfirm { controller.exitEdit() }
+        } else {
+            leaveWithConfirm { controller.goHome() }
+        }
     }
 
     fun guardEmpty(then: () -> Unit) {
@@ -189,9 +206,7 @@ fun EditorScreen(controller: PindouController) {
         }
     }
 
-    BackHandler {
-        if (editMode && !controller.isFreeCreation) controller.exitEdit() else leaveToHome()
-    }
+    BackHandler { backFromEditor() }
 
     Scaffold(
         topBar = {
@@ -200,15 +215,7 @@ fun EditorScreen(controller: PindouController) {
                     Text(if (editMode) "编辑" else "图纸")
                 },
                 navigationIcon = {
-                    IconButton(
-                        onClick = {
-                            if (editMode && !controller.isFreeCreation) {
-                                controller.exitEdit()
-                            } else {
-                                leaveToHome()
-                            }
-                        },
-                    ) {
+                    IconButton(onClick = { backFromEditor() }) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
@@ -514,19 +521,27 @@ fun EditorScreen(controller: PindouController) {
 
     if (confirmLeave) {
         AlertDialog(
-            onDismissRequest = { confirmLeave = false },
+            onDismissRequest = {
+                confirmLeave = false
+                leaveDest = null
+            },
             title = { Text("未保存") },
-            text = { Text("当前图纸尚未保存，退出后更改将丢失，是否保存？") },
+            text = { Text("当前图纸尚未保存，不保存将放弃本次更改，是否保存？") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmLeave = false
-                    guardEmpty { saveWithName { controller.goHome() } }
+                    val dest = leaveDest
+                    leaveDest = null
+                    guardEmpty { saveWithName { dest?.invoke() } }
                 }) { Text("保存") }
             },
             dismissButton = {
                 TextButton(onClick = {
                     confirmLeave = false
-                    controller.goHome()
+                    val dest = leaveDest
+                    leaveDest = null
+                    controller.discardEdits()
+                    dest?.invoke()
                 }) { Text("不保存") }
             },
         )

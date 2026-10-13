@@ -92,6 +92,52 @@ class DocumentStore(private val context: Context) {
         needsSave = false
     }
 
+    /** A committed baseline (content + flags) that "discard changes" reverts to. */
+    private data class Snapshot(
+        val project: PindouProject,
+        val edited: Boolean,
+        val needsSave: Boolean,
+        val isFreeCreation: Boolean,
+        val imported: Boolean,
+        val suggestedName: String?,
+        val ownPindouName: String?,
+        val ownPngName: String?,
+    )
+
+    private var committed: Snapshot? = null
+
+    /** Records the current project as the baseline that discarding unsaved changes reverts to. */
+    fun markCommitted() {
+        val p = project
+        committed = if (p == null) {
+            null
+        } else {
+            Snapshot(
+                project = p,
+                edited = edited,
+                needsSave = needsSave,
+                isFreeCreation = isFreeCreation,
+                imported = imported,
+                suggestedName = suggestedName,
+                ownPindouName = ownPindouName,
+                ownPngName = ownPngName,
+            )
+        }
+    }
+
+    /** Reverts to the last committed baseline, discarding all unsaved changes. */
+    fun revertToCommitted() {
+        val s = committed ?: return
+        project = s.project
+        edited = s.edited
+        needsSave = s.needsSave
+        isFreeCreation = s.isFreeCreation
+        imported = s.imported
+        suggestedName = s.suggestedName
+        ownPindouName = s.ownPindouName
+        ownPngName = s.ownPngName
+    }
+
     fun setOriginal(bitmap: Bitmap?) {
         originalBitmap = bitmap
     }

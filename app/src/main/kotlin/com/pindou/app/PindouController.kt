@@ -198,6 +198,7 @@ class PindouController(private val context: Context) {
         generation.applyFromProject(parsed)
         nav.updateShowReference(false)
         nav.go(Screen.Editor)
+        documents.markCommitted()
     }
 
     fun openPindou(uri: Uri, external: Boolean = false) {
@@ -212,6 +213,7 @@ class PindouController(private val context: Context) {
                 documents.markPindouSaved(base)
                 documents.markPngSaved(base)
             }
+            documents.markCommitted()
         } catch (e: Exception) {
             Log.w(TAG, "openPindou failed for $uri", e)
             nav.showError(
@@ -255,6 +257,13 @@ class PindouController(private val context: Context) {
     fun exitEdit() = editing.exit()
     fun selectEditTool(tool: EditTool) = editing.selectTool(tool)
     fun selectBrush(code: String?) = editing.selectBrush(code)
+
+    /** Discards all unsaved changes, reverting the project to the last committed state. */
+    fun discardEdits() {
+        documents.revertToCommitted()
+        documents.project?.let { generation.applyFromProject(it) }
+        editing.clearHistory()
+    }
 
     /** Reports the cell under the finger so the editor can draw the cursor highlight. */
     fun updateEditCursor(row: Int, col: Int) = editing.setCursor(row, col)
@@ -341,6 +350,7 @@ class PindouController(private val context: Context) {
         if (editMode) editing.enter() else editing.exit()
         nav.updateShowReference(false)
         nav.go(Screen.Editor)
+        documents.markCommitted()
     }
 
     // ---- Export & share ---------------------------------------------------
@@ -390,6 +400,7 @@ class PindouController(private val context: Context) {
             if (!share) {
                 documents.markSaved()
                 documents.markPindouSaved(base)
+                documents.markCommitted()
                 history.refresh()
                 onSaved?.invoke()
             }
