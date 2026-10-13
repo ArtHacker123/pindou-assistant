@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -98,6 +99,8 @@ fun ExportScreen(controller: PindouController) {
     val preview by produceState<Bitmap?>(initialValue = null, project, controller.exportSize, previewCell) {
         value = withContext(Dispatchers.Default) { controller.renderForm1(previewCell) }
     }
+
+    BackHandler { controller.goEditor() }
 
     Scaffold(
         topBar = {

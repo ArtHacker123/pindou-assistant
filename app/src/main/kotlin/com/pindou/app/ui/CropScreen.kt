@@ -1,5 +1,6 @@
 package com.pindou.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -96,6 +97,8 @@ fun CropScreen(controller: PindouController) {
     }
 
     LaunchedEffect(container) { resetView() }
+
+    BackHandler { controller.backFromCrop() }
 
     /** Constrains the image translation so it can never expose screen edges. */
     fun clampImage() {

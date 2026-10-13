@@ -1,5 +1,6 @@
 package com.pindou.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -61,6 +62,8 @@ private val DATE_ONLY_FORMAT = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault(
 fun HistoryScreen(controller: PindouController) {
     LaunchedEffect(Unit) { controller.refreshHistory() }
     var pendingDelete by remember { mutableStateOf<PatternEntry?>(null) }
+
+    BackHandler { controller.goHome() }
 
     Scaffold(
         topBar = {
