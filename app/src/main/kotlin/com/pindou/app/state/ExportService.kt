@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.compose.runtime.getValue
@@ -119,6 +120,30 @@ class ExportService(
             } catch (e: Exception) {
                 Log.w(TAG, "exportPindou failed", e)
                 nav.showError(e.message ?: "导出失败")
+            } finally {
+                nav.markBusy(false)
+            }
+        }
+    }
+
+    /** Shares an already-saved `.pindou` from Documents (copies it into our share dir first). */
+    fun shareStoredPindou(uri: Uri, displayName: String) {
+        nav.markBusy(true)
+        nav.clearError()
+        scope.launch {
+            try {
+                val file = withContext(Dispatchers.IO) {
+                    exportManager.copyToShare(uri, displayName)
+                }
+                exportManager.share(
+                    file,
+                    ExportManager.MIME_BINARY,
+                    "分享交互图纸",
+                    ExportManager.MIME_ANY,
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "shareStoredPindou failed", e)
+                nav.showError(e.message ?: "分享失败")
             } finally {
                 nav.markBusy(false)
             }

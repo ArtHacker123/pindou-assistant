@@ -144,6 +144,17 @@ class ExportManager(private val context: Context) {
 
     fun uriFor(file: File): Uri = FileProvider.getUriForFile(context, authority, file)
 
+    /** Copies an already-saved document (content or file uri) into the share dir for FileProvider sharing. */
+    fun copyToShare(uri: Uri, displayName: String): File {
+        val name = displayName.takeIf { it.isNotBlank() } ?: "pattern.pindou"
+        val fileName = if (name.endsWith(".pindou", ignoreCase = true)) name else "$name.pindou"
+        val file = File(exportDirectory(), fileName)
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            FileOutputStream(file).use { output -> input.copyTo(output) }
+        } ?: throw IOException("无法读取文件")
+        return file
+    }
+
     fun share(file: File, mimeType: String, chooserTitle: String, fallbackMimeType: String? = null) {
         val uri = uriFor(file)
         val send = sendIntent(uri, mimeType)

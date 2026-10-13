@@ -14,4 +14,5 @@ Always change file contents with the dedicated `read`, `write`, and `edit` tools
 
 ## Workflow
 - Propose and confirm before coding; keep OpenSpec in sync (`npx openspec ...`) and commit only when explicitly asked.
+- UI changes: do NOT verify on device yourself. Build, install the APK, then let the user test. Commit/archive only after the user confirms.
 - Compose quirks (1.5.4): no `InkEraser`; no `lastVisibleItemIndex`; `animateScrollBy` needs an explicit import; `0xFFEEEEEE` needs `.toInt()`.

@@ -211,6 +211,7 @@ class PindouController(private val context: Context) {
     fun goHistory() { nav.go(Screen.History) }
     fun refreshHistory() = history.refresh()
     fun deleteHistory(entry: PatternEntry) = history.delete(entry)
+    fun shareHistory(entry: PatternEntry) = export.shareStoredPindou(entry.uri, entry.displayName)
     fun clearError() = nav.clearError()
     fun clearStatus() = nav.clearStatus()
 

@@ -26,6 +26,10 @@ data class PatternEntry(
             ?: project?.let { "${it.grid.width}×${it.grid.height}" }
             ?: displayName
 
+    /** Bead palette display name, when the file could be decoded. */
+    val paletteName: String?
+        get() = project?.paletteSource?.displayName?.takeIf { it.isNotBlank() }
+
     /** Best available timestamp for sorting/display. */
     val timestamp: Long get() = project?.meta?.createdAt?.takeIf { it > 0L } ?: modified
 }
