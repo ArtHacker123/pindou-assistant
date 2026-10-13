@@ -122,7 +122,8 @@ class DocumentStore(private val context: Context) {
         needsSave = true
     }
 
-    private fun usedItems(palette: Palette, grid: Grid): List<PaletteItem> =
+    /** Palette items actually present in [grid], naturally sorted by code (for the color table). */
+    internal fun usedItems(palette: Palette, grid: Grid): List<PaletteItem> =
         grid.distinctCodes().mapNotNull { palette.item(it) }.sortedNaturallyBy { it.code }
 
     /** Reads and decodes a `.pindou` document from [uri]. */

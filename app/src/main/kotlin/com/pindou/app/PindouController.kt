@@ -306,7 +306,9 @@ class PindouController(private val context: Context) {
             createdAt = System.currentTimeMillis(),
         )
         documents.setWorking(null)
-        documents.updateProject(PindouProject(meta, palette, emptyList(), grid, referenceGrid = null))
+        documents.updateProject(
+            PindouProject(meta, palette, documents.usedItems(palette, grid), grid, referenceGrid = null),
+        )
         documents.markFreeCreation()
         editing.clearHistory()
         generation.applyFree(palette.name, grid.width)
