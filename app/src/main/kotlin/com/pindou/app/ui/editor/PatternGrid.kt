@@ -177,6 +177,7 @@ fun PatternGrid(
                     var pastSlop = false
                     var canceled = false
                     val downPos = down.position
+                    var lastCell: Pair<Int, Int>? = null
                     var cursorRow = Int.MIN_VALUE
                     var cursorCol = Int.MIN_VALUE
 
@@ -187,9 +188,8 @@ fun PatternGrid(
                         return if (row in 0 until grid.height && col in 0 until grid.width) row to col else null
                     }
 
-                    fun editAt(position: Offset) {
-                        val cell = cellAt(position) ?: return
-                        val (row, col) = cell
+                    fun editCell(row: Int, col: Int) {
+                        if (row !in 0 until grid.height || col !in 0 until grid.width) return
                         val index = row * grid.width + col
                         if (index != lastEdit) {
                             lastEdit = index
@@ -223,6 +223,46 @@ fun PatternGrid(
                             cursorRow = cell.first
                             cursorCol = cell.second
                             onEditCursor(cell.first, cell.second, true)
+                        }
+                    }
+
+                    // Paints every cell the segment from the last painted cell to
+                    // [position] passes over, using a 1-cell-wide Bresenham walk
+                    // so a fast swipe stays connected without thickening the
+                    // stroke (a diagonal stays one cell wide).
+                    fun paintTo(position: Offset) {
+                        val to = cellAt(position)
+                        if (to == null) {
+                            lastCell = null
+                            return
+                        }
+                        val from = lastCell
+                        lastCell = to
+                        if (from == null) {
+                            editCell(to.first, to.second)
+                            return
+                        }
+                        var x = from.second
+                        var y = from.first
+                        val x1 = to.second
+                        val y1 = to.first
+                        val dx = abs(x1 - x)
+                        val dy = -abs(y1 - y)
+                        val sx = if (x < x1) 1 else -1
+                        val sy = if (y < y1) 1 else -1
+                        var err = dx + dy
+                        while (true) {
+                            editCell(y, x)
+                            if (x == x1 && y == y1) break
+                            val e2 = 2 * err
+                            if (e2 >= dy) {
+                                err += dy
+                                x += sx
+                            }
+                            if (e2 <= dx) {
+                                err += dx
+                                y += sy
+                            }
                         }
                     }
 
@@ -287,7 +327,7 @@ fun PatternGrid(
 
                         if (drawing) {
                             ch.firstOrNull { it.pressed }?.let {
-                                editAt(it.position)
+                                paintTo(it.position)
                                 markCursor(it.position)
                             }
                             event.changes.forEach {
@@ -306,10 +346,10 @@ fun PatternGrid(
                                     if (canDraw && dragDraw && pressedCount == 1) {
                                         drawing = true
                                         startStroke()
-                                        editAt(downPos)
+                                        paintTo(downPos)
                                         markCursor(downPos)
                                         ch.firstOrNull { it.pressed }?.let {
-                                            editAt(it.position)
+                                            paintTo(it.position)
                                             markCursor(it.position)
                                         }
                                     }
