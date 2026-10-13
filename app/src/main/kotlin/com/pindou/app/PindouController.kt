@@ -164,6 +164,7 @@ class PindouController(private val context: Context) {
             CropPurpose.SOURCE -> {
                 documents.setWorking(cropped.paddedToSquare())
                 documents.markGenerated()
+                editing.exit()
                 nav.updateShowReference(false)
                 nav.go(Screen.Editor)
                 generation.runGenerate()
@@ -181,6 +182,7 @@ class PindouController(private val context: Context) {
         documents.markSaved()
         documents.markGenerated()
         editing.clearHistory()
+        editing.exit()
         generation.applyFromProject(parsed)
         nav.updateShowReference(false)
         nav.go(Screen.Editor)

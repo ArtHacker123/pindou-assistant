@@ -4,7 +4,7 @@
 TBD - created by archiving change add-pattern-editing. Update Purpose after archive.
 ## Requirements
 ### Requirement: Edit mode over the pattern grid
-The system SHALL provide an edit mode over the same pattern grid, reached from the pattern screen's view mode. Switching to edit mode SHALL keep the project, the viewport, and the reference overlay intact. The "完成" action SHALL return to view mode. Free-created projects SHALL open directly in edit mode.
+The system SHALL provide an edit mode over the same pattern grid, reached from the pattern screen's view mode. Switching to edit mode SHALL keep the project, the viewport, and the reference overlay intact. The "完成" action SHALL return to view mode. Opening an existing pattern — from the home recent list, the history page, or an external `.pindou` — SHALL enter view mode (图纸), never edit mode, regardless of any previous editing session. Free-created projects and templates SHALL open directly in edit mode.
 
 #### Scenario: Enter and leave edit mode
 - **WHEN** the user taps "编辑" in view mode
@@ -13,6 +13,10 @@ The system SHALL provide an edit mode over the same pattern grid, reached from t
 #### Scenario: Viewport preserved across the mode switch
 - **WHEN** the user has panned/zoomed in view mode and enters edit mode
 - **THEN** the grid stays at the same scale and position
+
+#### Scenario: Opening a saved pattern starts in view mode
+- **WHEN** the user opens an existing pattern from the home recent list, the history page, or an external `.pindou`
+- **THEN** the editor opens in view mode with the title "图纸", not in edit mode
 
 ### Requirement: Editing tools
 Edit mode SHALL provide a tool bar with paint (画笔), erase (橡皮), eyedropper (取色器), bucket fill (油漆桶), and move (移动). Paint SHALL write the currently selected bead color; erase SHALL clear the cell to an empty hole (`null`); bucket fill SHALL flood the 4-connected region of cells sharing the target cell's color code (including `null`) with the selected color, bounded by the grid edges; move SHALL let a single-finger drag pan the viewport instead of drawing. The selected bead color SHALL be choosable from the color table.
