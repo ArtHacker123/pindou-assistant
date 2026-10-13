@@ -47,6 +47,15 @@
                 <data android:host="*" />
                 <data android:pathPattern=".*\\.pindou" />
             </intent-filter>
+
+            <!-- Match files messengers (WeChat/QQ) expose with a generic binary MIME -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
         </activity>
 
         <provider

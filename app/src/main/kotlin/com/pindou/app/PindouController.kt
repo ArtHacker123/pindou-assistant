@@ -102,6 +102,9 @@ class PindouController(private val context: Context) {
     /** Whether the current project has unsaved changes since the last `.pindou` save. */
     val needsSave: Boolean get() = documents.needsSave
 
+    /** Whether the current project was opened from an external file (not yet in our Documents). */
+    val imported: Boolean get() = documents.imported
+
     /** True when the grid has no bead at all (nothing to save or export). */
     val projectIsEmpty: Boolean
         get() = documents.project?.grid?.cells?.all { it == null } ?: true
@@ -183,12 +186,20 @@ class PindouController(private val context: Context) {
         nav.go(Screen.Editor)
     }
 
-    fun openPindou(uri: Uri) {
+    fun openPindou(uri: Uri, external: Boolean = false) {
+        val name = documents.displayName(uri)
         try {
             openProject(documents.open(uri))
+            documents.markImported(external)
         } catch (e: Exception) {
             Log.w(TAG, "openPindou failed for $uri", e)
-            nav.showError(e.message ?: "无法打开 .pindou 文件")
+            nav.showError(
+                if (name != null && !name.endsWith(".pindou", ignoreCase = true)) {
+                    "这不是拼豆图纸文件（.pindou）"
+                } else {
+                    "无法打开：文件可能已损坏或版本不受支持"
+                },
+            )
         }
     }
 
@@ -318,6 +329,11 @@ class PindouController(private val context: Context) {
                 onSaved?.invoke()
             }
         })
+    }
+
+    /** Copies an externally opened `.pindou` into our Documents folder, regardless of the save flag. */
+    fun importToDocuments() {
+        exportPindou(share = false, onSaved = { documents.markImported(false) })
     }
 
     /** One-tap save to Documents that always embeds the reference image. */

@@ -29,7 +29,7 @@ fun PindouApp(pendingUri: MutableState<Uri?>) {
     LaunchedEffect(pendingUri.value) {
         val uri = pendingUri.value
         if (uri != null) {
-            controller.openPindou(uri)
+            controller.openPindou(uri, external = true)
             pendingUri.value = null
         }
     }

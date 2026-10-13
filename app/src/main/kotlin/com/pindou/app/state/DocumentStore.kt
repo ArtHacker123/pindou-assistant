@@ -44,6 +44,15 @@ class DocumentStore(private val context: Context) {
     var needsSave by mutableStateOf(false)
         private set
 
+    /** Whether the project was opened from an external source (e.g. a shared `.pindou`). */
+    var imported by mutableStateOf(false)
+        private set
+
+    /** Records whether the project came from an external file (drives the "save to my patterns" prompt). */
+    fun markImported(value: Boolean) {
+        imported = value
+    }
+
     fun markFreeCreation() {
         isFreeCreation = true
     }
@@ -69,6 +78,7 @@ class DocumentStore(private val context: Context) {
         project = value
         edited = false
         needsSave = true
+        imported = false
     }
 
     /** Replaces the grid in place (an edit), keeping the palette and reference when still aligned. */
@@ -119,5 +129,21 @@ class DocumentStore(private val context: Context) {
             ?.bufferedReader()?.use { it.readText() }
             ?: throw ProjectFormatException("无法读取文件")
         return ProjectSerializer.decode(text)
+    }
+
+    /** Best-effort display name for a content [uri], used to sanity-check an opened file. */
+    fun displayName(uri: Uri): String? = try {
+        context.contentResolver.query(
+            uri,
+            arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            if (cursor.moveToFirst() && index >= 0) cursor.getString(index) else null
+        }
+    } catch (e: Exception) {
+        null
     }
 }
