@@ -1009,7 +1009,7 @@ private fun InfoBar(
             if (editMode) {
                 Text("工具：$toolLabel", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    if (brushCode != null) "当前珠子 $brushCode" else "请在下方选择珠子颜色",
+                    if (brushCode != null) "当前色号 $brushCode" else "请在下方选择珠子颜色",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                 )
