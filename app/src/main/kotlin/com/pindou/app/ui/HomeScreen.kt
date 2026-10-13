@@ -49,7 +49,7 @@ import com.pindou.app.data.PatternEntry
 import com.pindou.app.data.PindouTemplate
 import com.pindou.app.data.TEMPLATES
 
-private val FREE_SIZES = listOf(29, 52, 58, 78, 104, 116, 128)
+private val FREE_SIZES = listOf(15, 29, 52, 58, 78, 104, 116, 128)
 private const val FREE_DEFAULT_SIZE = 52
 private const val RECENT_LIMIT = 6
 
