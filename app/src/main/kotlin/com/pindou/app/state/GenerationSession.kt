@@ -23,6 +23,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** Color count used when the target is "automatic" or otherwise unset. */
+private const val AUTO_COLOR_COUNT = 16
+
 /**
  * Holds the generation parameters, the debounced regeneration loop, and the
  * cached grid-resolution reference. Writes its result into the [DocumentStore]
@@ -88,17 +91,24 @@ class GenerationSession(
         this.paletteName = paletteName
         imageType = ImageType.CARTOON
         colorCountAuto = true
-        colorCountTarget = 16
+        colorCountTarget = AUTO_COLOR_COUNT
         gridWidth = size
         gridHeight = size
     }
 
-    /** Applies the parameters embedded in an opened project without regenerating. */
+    /**
+     * Applies the parameters embedded in an opened project without regenerating.
+     *
+     * Blank free-creation and template projects store `colorCountTarget = 0` (they skip
+     * quantization). Such a value must not leak into the shared session, or a later gallery/camera
+     * generation would inherit it and produce a single-color pattern; fall back to automatic.
+     */
     fun applyFromProject(project: PindouProject) {
         paletteName = project.meta.paletteName
         imageType = ImageType.fromId(project.meta.imageType)
-        colorCountAuto = false
-        colorCountTarget = project.meta.colorCountTarget
+        val target = project.meta.colorCountTarget
+        colorCountAuto = target <= 0
+        colorCountTarget = if (target > 0) target else AUTO_COLOR_COUNT
         gridWidth = project.meta.gridWidth
         gridHeight = project.meta.gridHeight
     }
@@ -156,7 +166,7 @@ class GenerationSession(
         val type = imageType
         val gw = gridWidth
         val gh = gridHeight
-        val colorCount = colorCountTarget
+        val colorCount = colorCountTarget.coerceAtLeast(1)
         scope.launch {
             try {
                 val (key, reference, result) = withContext(Dispatchers.Default) {
