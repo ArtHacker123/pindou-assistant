@@ -222,7 +222,7 @@ fun EditorScreen(controller: PindouController) {
                 },
                 actions = {
                     TextButton(
-                        enabled = project != null,
+                        enabled = project != null && !editMode,
                         onClick = { paramsExpanded = !paramsExpanded },
                         modifier = Modifier.background(
                             if (paramsExpanded) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
