@@ -45,7 +45,6 @@ import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -120,6 +119,16 @@ fun EditorScreen(controller: PindouController) {
     var showPattern by remember { mutableStateOf(true) }
     var peeking by remember { mutableStateOf(false) }
     val referenceImage = remember(project) { project?.referenceGrid?.toImage() }
+    // A spread of current-palette colors for the bead-themed generating animation.
+    val generatingColors = remember(controller.paletteName) {
+        val items = controller.palette()?.items.orEmpty()
+        if (items.isEmpty()) {
+            emptyList()
+        } else {
+            val step = maxOf(1, items.size / 8)
+            items.filterIndexed { i, _ -> i % step == 0 }.take(8).map { Color(it.rgb.toArgb()) }
+        }
+    }
 
     var pendingPalette by remember { mutableStateOf<String?>(null) }
     var pendingSize by remember { mutableStateOf<Int?>(null) }
@@ -395,21 +404,25 @@ fun EditorScreen(controller: PindouController) {
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            if (controller.busy) "生成中…" else "请选择参数生成图纸",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
+                        if (controller.busy) {
+                            GeneratingIndicator(colors = generatingColors)
+                        } else {
+                            Text(
+                                "请选择参数生成图纸",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
                     }
                 }
 
-                if (controller.busy) {
+                if (controller.busy && project != null) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color(0x00000000)),
+                            .background(Color(0x66000000)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        CircularProgressIndicator()
+                        GeneratingIndicator(colors = generatingColors, textColor = Color.White)
                     }
                 }
 
