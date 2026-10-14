@@ -87,6 +87,29 @@ class GridEditorTest {
         assertSame(g, GridEditor.floodFill(g, 0, 0, "A"))
     }
 
+    @Test
+    fun `region erase clears a connected region only`() {
+        val g = grid(
+            3, 3,
+            "A", "A", "B",
+            "A", "B", "B",
+            "C", "C", "B",
+        )
+        val out = GridEditor.regionErase(g, 0, 0)
+        assertNull(out[0, 0])
+        assertNull(out[1, 0])
+        assertNull(out[0, 1])
+        assertEquals("B", out[0, 2])
+        assertEquals("B", out[1, 1])
+        assertEquals("C", out[2, 0])
+    }
+
+    @Test
+    fun `region erase on a hole is a no-op`() {
+        val g = grid(2, 1, null, "A")
+        assertSame(g, GridEditor.regionErase(g, 0, 0))
+    }
+
     // ---- remap ------------------------------------------------------------
 
     @Test

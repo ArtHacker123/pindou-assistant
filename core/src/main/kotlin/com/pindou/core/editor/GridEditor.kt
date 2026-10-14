@@ -70,6 +70,13 @@ object GridEditor {
     }
 
     /**
+     * Clears the 4-connected region of cells sharing the target cell's color
+     * code (the connected-region erase, symmetric to [floodFill]). Cells of
+     * other codes and holes remain untouched.
+     */
+    fun regionErase(grid: Grid, row: Int, col: Int): Grid = floodFill(grid, row, col, null)
+
+    /**
      * Re-maps every non-null cell to the perceptually closest color of [target].
      * Each existing code is resolved through [source] (the palette the grid was
      * authored with) — or through [target] itself as a fallback. Holes stay holes.

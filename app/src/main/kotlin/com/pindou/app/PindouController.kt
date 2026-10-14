@@ -91,6 +91,17 @@ class PindouController(private val context: Context) {
     val editTool: EditTool get() = editing.tool
     val brushCode: String? get() = editing.brushCode
 
+    /** Whether the eraser is in region-erase mode. */
+    val eraseConnected: Boolean get() = editing.eraseConnected
+
+    /** The label for the active tool, reflecting the eraser's region-erase mode. */
+    val editToolLabel: String
+        get() = if (editing.tool == EditTool.ERASE && editing.eraseConnected) {
+            "橡皮·区域擦除"
+        } else {
+            editing.tool.label
+        }
+
     /** The cell under the finger in edit mode (cursor highlight), or null. */
     val editCursor: Pair<Int, Int>? get() = editing.cursor
 
@@ -258,6 +269,9 @@ class PindouController(private val context: Context) {
     fun exitEdit() = editing.exit()
     fun selectEditTool(tool: EditTool) = editing.selectTool(tool)
     fun selectBrush(code: String?) = editing.selectBrush(code)
+
+    /** Toggles the eraser between single-cell and region erase. */
+    fun toggleEraseConnected() = editing.toggleEraseConnected()
 
     /** Discards all unsaved changes, reverting the project to the last committed state. */
     fun discardEdits() {

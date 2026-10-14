@@ -38,6 +38,10 @@ class EditingSession(
     var tool by mutableStateOf(EditTool.PAINT)
         private set
 
+    /** Whether the eraser is in region-erase mode (double-tap the eraser to toggle). */
+    var eraseConnected by mutableStateOf(false)
+        private set
+
     var brushCode by mutableStateOf<String?>(null)
         private set
 
@@ -76,6 +80,11 @@ class EditingSession(
 
     fun selectTool(value: EditTool) {
         tool = value
+    }
+
+    /** Toggles the eraser between single-cell and region erase. */
+    fun toggleEraseConnected() {
+        eraseConnected = !eraseConnected
     }
 
     fun selectBrush(code: String?) {
@@ -136,7 +145,10 @@ class EditingSession(
                 strokeEdit { g: Grid -> GridEditor.paint(g, row, col, brushCode!!) }
 
             EditTool.ERASE ->
-                strokeEdit { g: Grid -> GridEditor.erase(g, row, col) }
+                strokeEdit { g: Grid ->
+                    if (eraseConnected) GridEditor.regionErase(g, row, col)
+                    else GridEditor.erase(g, row, col)
+                }
 
             EditTool.BUCKET ->
                 strokeEdit { g: Grid -> GridEditor.floodFill(g, row, col, brushCode!!) }

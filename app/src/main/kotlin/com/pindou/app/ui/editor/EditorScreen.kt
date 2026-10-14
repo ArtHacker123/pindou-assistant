@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -378,7 +379,8 @@ fun EditorScreen(controller: PindouController) {
                         showReference = if (peeking) true else controller.showReference,
                         editMode = editMode,
                         moveMode = controller.editTool == EditTool.MOVE,
-                        dragDraw = controller.editTool == EditTool.PAINT || controller.editTool == EditTool.ERASE,
+                        dragDraw = controller.editTool == EditTool.PAINT ||
+                            (controller.editTool == EditTool.ERASE && !controller.eraseConnected),
                         onEdit = { row, col -> controller.applyEdit(row, col, peeking) },
                         onEditStart = { controller.beginStroke() },
                         onEditEnd = { controller.endStroke() },
@@ -413,7 +415,12 @@ fun EditorScreen(controller: PindouController) {
                 if (editMode && project != null) {
                     FloatingToolbar(
                         selected = controller.editTool,
+                        eraseConnected = controller.eraseConnected,
                         onSelect = controller::selectEditTool,
+                        onToggleEraseConnected = {
+                            controller.selectEditTool(EditTool.ERASE)
+                            controller.toggleEraseConnected()
+                        },
                         canUndo = controller.canUndo,
                         canRedo = controller.canRedo,
                         onUndo = { controller.undoEdit() },
@@ -451,7 +458,7 @@ fun EditorScreen(controller: PindouController) {
                 val counts = remember(project) { project.grid.cells.filterNotNull().groupingBy { it }.eachCount() }
                 InfoBar(
                     editMode = editMode,
-                    toolLabel = controller.editTool.label,
+                    toolLabel = controller.editToolLabel,
                     brushCode = controller.brushCode,
                     selectedCode = selectedCode,
                     selectedPos = selectedPos,
@@ -787,7 +794,9 @@ private fun EditActionBar(
 @Composable
 private fun FloatingToolbar(
     selected: EditTool,
+    eraseConnected: Boolean,
     onSelect: (EditTool) -> Unit,
+    onToggleEraseConnected: () -> Unit,
     canUndo: Boolean,
     canRedo: Boolean,
     onUndo: () -> Unit,
@@ -846,31 +855,65 @@ private fun FloatingToolbar(
             HistoryButton(Icons.Filled.Redo, "重做", canRedo, onRedo)
             Divider(Modifier.width(24.dp).padding(vertical = 2.dp))
             drawTools.forEach { tool ->
-                ToolButton(tool, selected == tool) { onSelect(tool) }
+                if (tool == EditTool.ERASE) {
+                    ToolButton(
+                        tool = tool,
+                        selected = selected == tool,
+                        accent = eraseConnected,
+                        onDoubleTap = onToggleEraseConnected,
+                        onClick = { onSelect(tool) },
+                    )
+                } else {
+                    ToolButton(tool, selected == tool) { onSelect(tool) }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ToolButton(tool: EditTool, selected: Boolean, onClick: () -> Unit) {
+private fun ToolButton(
+    tool: EditTool,
+    selected: Boolean,
+    accent: Boolean = false,
+    onDoubleTap: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
+    val doubleTap = onDoubleTap
+    val background = when {
+        accent -> MaterialTheme.colorScheme.primary
+        selected -> MaterialTheme.colorScheme.secondaryContainer
+        else -> Color.Transparent
+    }
+    val tint = when {
+        accent -> MaterialTheme.colorScheme.onPrimary
+        selected -> MaterialTheme.colorScheme.onSecondaryContainer
+        else -> MaterialTheme.colorScheme.onSurface
+    }
     Box(
         modifier = Modifier
             .size(36.dp)
             .clip(RoundedCornerShape(50))
-            .background(
-                if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-                RoundedCornerShape(50),
-            )
-            .clickable { onClick() },
+            .background(background, RoundedCornerShape(50))
+            .then(
+                if (doubleTap == null) {
+                    Modifier.clickable { onClick() }
+                } else {
+                    Modifier.pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = { onClick() },
+                            onDoubleTap = { doubleTap() },
+                        )
+                    }
+                },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             tool.icon(),
-            contentDescription = tool.label,
+            contentDescription = if (accent) "${tool.label}·区域擦除" else tool.label,
             modifier = Modifier.size(20.dp),
-            tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
-            else MaterialTheme.colorScheme.onSurface,
+            tint = tint,
         )
     }
 }
