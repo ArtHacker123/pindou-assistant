@@ -176,6 +176,7 @@ class PindouController(private val context: Context) {
             CropPurpose.SOURCE -> {
                 documents.setWorking(cropped.paddedToSquare())
                 documents.markGenerated()
+                documents.clearProject()
                 editing.exit()
                 nav.updateShowReference(false)
                 nav.go(Screen.Editor)

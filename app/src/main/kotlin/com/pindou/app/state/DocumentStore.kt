@@ -146,6 +146,22 @@ class DocumentStore(private val context: Context) {
         workingImage = image
     }
 
+    /**
+     * Empties the in-memory project at the start of a generation from a freshly imported image, so
+     * the editor shows a generating state instead of the previously opened/generated pattern. The
+     * working image (and reference) are kept; generation fills in the new project.
+     */
+    fun clearProject() {
+        project = null
+        edited = false
+        needsSave = false
+        imported = false
+        suggestedName = null
+        ownPindouName = null
+        ownPngName = null
+        committed = null
+    }
+
     fun updateProject(value: PindouProject?) {
         project = value
         edited = false
