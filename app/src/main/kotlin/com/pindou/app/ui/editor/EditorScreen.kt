@@ -321,6 +321,7 @@ fun EditorScreen(controller: PindouController) {
                     controller = controller,
                     onImageType = { type -> runOrConfirm { controller.updateImageType(type) } },
                     onPalette = { name -> pendingPalette = name },
+                    onColorStrategy = { id -> runOrConfirm { controller.updateColorStrategy(id) } },
                     onSize = { size ->
                         if (controller.hasSource && !controller.edited) {
                             controller.resizeGridRegenerate(size)
@@ -946,6 +947,7 @@ private fun ParamsPanel(
     controller: PindouController,
     onImageType: (ImageType) -> Unit,
     onPalette: (String) -> Unit,
+    onColorStrategy: (String) -> Unit,
     onSize: (Int) -> Unit,
     onColorCount: (Boolean, Int) -> Unit,
 ) {
@@ -996,6 +998,18 @@ private fun ParamsPanel(
                     val count = if (auto) AUTO_COLOR_COUNT else COLOR_COUNTS[it - 1]
                     onColorCount(auto, count)
                 },
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            FieldDropdown(
+                label = "取色方式",
+                selected = controller.colorStrategies
+                    .firstOrNull { it.id == controller.colorStrategy }
+                    ?.displayName ?: "参考图直取",
+                options = controller.colorStrategies.map { it.displayName },
+                enabled = hasSource,
+                modifier = Modifier.weight(1f),
+                onSelect = { onColorStrategy(controller.colorStrategies[it].id) },
             )
         }
     }

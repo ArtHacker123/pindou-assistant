@@ -11,6 +11,8 @@ import com.pindou.app.data.SourceHasher
 import com.pindou.core.generate.GenerateConfig
 import com.pindou.core.generate.PatternGenerator
 import com.pindou.core.imaging.ImageType
+import com.pindou.core.match.ColorStrategy
+import com.pindou.core.match.ColorStrategyRegistry
 import com.pindou.core.model.Palette
 import com.pindou.core.model.PindouProject
 import com.pindou.core.model.PixelImage
@@ -47,12 +49,17 @@ class GenerationSession(
 
     private val TAG = "GenerationSession"
     private val palettes = PaletteRegistry(AssetPaletteProvider(context))
+    private val strategies = ColorStrategyRegistry.default()
 
     val paletteMetas: List<PaletteMeta> = palettes.available()
+
+    /** Color-selection strategies offered to the user. */
+    val colorStrategies: List<ColorStrategy> = strategies.all()
 
     // Generation parameters (two-way bound by the merged parameter/pattern screen).
     var imageType by mutableStateOf(ImageType.CARTOON)
     var paletteName by mutableStateOf(paletteMetas.firstOrNull()?.name)
+    var colorStrategy by mutableStateOf(ColorStrategyRegistry.DEFAULT_ID)
     var colorCountAuto by mutableStateOf(true)
     var colorCountTarget by mutableStateOf(16)
     var gridWidth by mutableStateOf(52)
@@ -69,6 +76,19 @@ class GenerationSession(
     )
     private var referenceKey: ReferenceKey? = null
     private var cachedReference: PixelImage? = null
+
+    // Preprocessing depends only on the working image and image type, so its
+    // result is reused across every regeneration that keeps the same source and
+    // preset (palette / color-count / strategy changes included). The image
+    // object is stable between imports, so identity comparison is the key.
+    private var preprocessImage: PixelImage? = null
+    private var preprocessType: String? = null
+    private var cachedProcessed: PixelImage? = null
+
+    // The source hash only depends on the working image; it is expensive enough
+    // (a full-image SHA-256) to reuse instead of recomputing on every change.
+    private var hashImage: PixelImage? = null
+    private var cachedHash: String? = null
 
     fun palette(): Palette? = paletteName?.let { palettes.load(it) }
 
@@ -90,6 +110,7 @@ class GenerationSession(
     fun applyFree(paletteName: String, size: Int) {
         this.paletteName = paletteName
         imageType = ImageType.CARTOON
+        colorStrategy = ColorStrategyRegistry.DEFAULT_ID
         colorCountAuto = true
         colorCountTarget = AUTO_COLOR_COUNT
         gridWidth = size
@@ -106,6 +127,7 @@ class GenerationSession(
     fun applyFromProject(project: PindouProject) {
         paletteName = project.meta.paletteName
         imageType = ImageType.fromId(project.meta.imageType)
+        colorStrategy = project.meta.colorStrategy
         val target = project.meta.colorCountTarget
         colorCountAuto = target <= 0
         colorCountTarget = if (target > 0) target else AUTO_COLOR_COUNT
@@ -123,6 +145,13 @@ class GenerationSession(
     fun updatePalette(name: String) {
         if (paletteName != name) {
             paletteName = name
+            scheduleRegen()
+        }
+    }
+
+    fun updateColorStrategy(id: String) {
+        if (colorStrategy != id) {
+            colorStrategy = id
             scheduleRegen()
         }
     }
@@ -157,6 +186,29 @@ class GenerationSession(
         runGenerate()
     }
 
+    /** Applies the image-type preset, reusing the result while source and type are unchanged. */
+    private fun preprocessFor(image: PixelImage, type: ImageType): PixelImage {
+        if (preprocessImage === image && preprocessType == type.id) {
+            cachedProcessed?.let { return it }
+        }
+        val processed = references.preprocess(image, type)
+        preprocessImage = image
+        preprocessType = type.id
+        cachedProcessed = processed
+        return processed
+    }
+
+    /** Fingerprints the working image, reusing the result while the source is unchanged. */
+    private fun hashFor(image: PixelImage): String {
+        if (hashImage === image) {
+            cachedHash?.let { return it }
+        }
+        val value = SourceHasher.hash(image)
+        hashImage = image
+        cachedHash = value
+        return value
+    }
+
     fun runGenerate() {
         val image = documents.workingImage ?: return
         val palette = palette() ?: return
@@ -164,17 +216,24 @@ class GenerationSession(
         nav.clearError()
         val seq = ++genSeq
         val type = imageType
+        val strategy = colorStrategy
+        val auto = colorCountAuto
         val gw = gridWidth
         val gh = gridHeight
         val colorCount = colorCountTarget.coerceAtLeast(1)
         scope.launch {
             try {
                 val (key, reference, result) = withContext(Dispatchers.Default) {
+                    val t0 = System.currentTimeMillis()
                     val newKey = ReferenceKey(image, type.id, gw, gh)
                     val reuse = if (newKey == referenceKey) cachedReference else null
-                    val processed = references.preprocess(image, type)
+                    val t1 = System.currentTimeMillis()
+                    val processed = preprocessFor(image, type)
+                    val t2 = System.currentTimeMillis()
                     val reference = reuse ?: references.reference(processed, gw, gh)
-                    val hash = SourceHasher.hash(image)
+                    val t3 = System.currentTimeMillis()
+                    val hash = hashFor(image)
+                    val t4 = System.currentTimeMillis()
                     val generated = generator.generate(
                         processed,
                         GenerateConfig(
@@ -182,12 +241,22 @@ class GenerationSession(
                             gridHeight = gh,
                             palette = palette,
                             colorCountTarget = colorCount,
+                            colorStrategy = strategy,
+                            colorCountAuto = auto,
                             imageType = type,
                             seed = hash.hashCode().toLong(),
                             createdAt = System.currentTimeMillis(),
                             sourceHash = hash,
                         ),
                         reference = reference,
+                    )
+                    val t5 = System.currentTimeMillis()
+                    Log.i(
+                        TAG,
+                        "gen seq=$seq img=${image.width}x${image.height} grid=${gw}x${gh} " +
+                            "type=${type.id} strat=$strategy reuse=${reuse != null} auto=$auto count=$colorCount " +
+                            "| prepend=${t1 - t0} preprocess=${t2 - t1} reference=${t3 - t2} " +
+                            "hash=${t4 - t3} generate=${t5 - t4} total=${t5 - t0}ms",
                     )
                     Triple(newKey, reference, generated)
                 }

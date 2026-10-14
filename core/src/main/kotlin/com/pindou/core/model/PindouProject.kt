@@ -11,6 +11,8 @@ data class ProjectMeta(
     val paletteName: String,
     val paletteVersion: String,
     val colorCountTarget: Int,
+    /** Color-selection strategy id used for generation; mirrors `ColorStrategyRegistry.DEFAULT_ID`. */
+    val colorStrategy: String = "reference",
     val createdAt: Long,
     val name: String = "",
     val sourceHash: String? = null,

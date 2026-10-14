@@ -46,6 +46,25 @@ interface ColorSpace {
         }
         return best
     }
+
+    /**
+     * Index of the candidate closest to an already-encoded [target], or -1 when
+     * [candidates] is empty. Use this with cached encodings to avoid re-encoding
+     * the same colors on every lookup.
+     */
+    fun nearestIndex(target: DoubleArray, candidates: List<DoubleArray>): Int {
+        if (candidates.isEmpty()) return -1
+        var best = 0
+        var bestDistance = Double.MAX_VALUE
+        for (i in candidates.indices) {
+            val d = squaredDistance(target, candidates[i])
+            if (d < bestDistance) {
+                bestDistance = d
+                best = i
+            }
+        }
+        return best
+    }
 }
 
 /** Identity sRGB coordinates with plain Euclidean distance: a fast reference metric. */

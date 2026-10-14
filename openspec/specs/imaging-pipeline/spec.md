@@ -19,7 +19,7 @@ The system SHALL apply image-type preprocessing as an ordered pipeline of indepe
 - **THEN** it takes effect without any change to the generation orchestration code
 
 ### Requirement: Shared grid-cell sampling
-The system SHALL compute, in a single pass, each grid cell's validity and its linear-light average color from the preprocessed image, and SHALL expose that result for reuse by both cell snapping and reference-image production.
+The system SHALL compute, in a single pass, each grid cell's validity and its linear-light average color from the preprocessed image, and SHALL expose that result for reuse by cell snapping, color selection, and reference-image production.
 
 #### Scenario: One pass yields cell colors and validity
 - **WHEN** the grid sampler runs for a `W × H` grid over a preprocessed image
@@ -28,6 +28,10 @@ The system SHALL compute, in a single pass, each grid cell's validity and its li
 #### Scenario: Generation snaps from the shared samples
 - **WHEN** a pattern is generated
 - **THEN** each cell's bead is chosen from the same per-cell average produced by the grid sampler, with no second per-cell averaging pass
+
+#### Scenario: Color selection reuses the shared samples
+- **WHEN** a pattern is generated with the reference-direct color-selection strategy
+- **THEN** the used bead colors are chosen from the same per-cell averages produced by the grid sampler, with no separate sampling pass over the working image
 
 ### Requirement: Reference image produced independently of quantization
 The system SHALL build the grid-resolution reference image directly from a preprocessed image and a grid size, without running quantization or palette mapping, and the result SHALL equal the reference produced during generation for the same inputs.

@@ -278,4 +278,59 @@ class PatternGeneratorTest {
         val expected = ReferenceBuilder.build(image, config.gridWidth, config.gridHeight).toReferenceGrid()
         assertEquals(expected, project.referenceGrid)
     }
+
+    @Test
+    fun `reference-direct is the default strategy`() {
+        val generator = PatternGenerator()
+        val project = generator.generate(
+            bandsImage(),
+            GenerateConfig(
+                gridWidth = 4,
+                gridHeight = 4,
+                palette = TestPalettes.withMany(),
+                colorCountTarget = 2,
+                colorCountAuto = false,
+                seed = 1,
+            ),
+        )
+        // The two bands map only to black and red; automatic is off so N applies, both fit.
+        assertEquals("reference", project.meta.colorStrategy)
+        assertEquals(setOf("C1", "C3"), project.paletteUsed.map { it.code }.toSet())
+    }
+
+    @Test
+    fun `automatic reference-direct keeps every bead that appears`() {
+        val generator = PatternGenerator()
+        val project = generator.generate(
+            bandsImage(),
+            GenerateConfig(
+                gridWidth = 4,
+                gridHeight = 4,
+                palette = TestPalettes.withMany(),
+                colorCountTarget = 1,
+                colorCountAuto = true,
+            ),
+        )
+        // Even with a tiny target, automatic is uncapped so both bands survive.
+        assertEquals(setOf("C1", "C3"), project.paletteUsed.map { it.code }.toSet())
+    }
+
+    @Test
+    fun `k-means strategy remains selectable`() {
+        val generator = PatternGenerator()
+        val project = generator.generate(
+            bandsImage(),
+            GenerateConfig(
+                gridWidth = 2,
+                gridHeight = 1,
+                palette = TestPalettes.basic(),
+                colorCountTarget = 2,
+                colorStrategy = "kmeans",
+                colorCountAuto = false,
+                seed = 1,
+            ),
+        )
+        assertEquals("kmeans", project.meta.colorStrategy)
+        assertEquals(2, project.paletteUsed.size)
+    }
 }

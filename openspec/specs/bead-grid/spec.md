@@ -19,14 +19,14 @@ The system SHALL let the user define the grid dimensions (W×H) with a maximum o
 - **THEN** it corresponds to coordinate (row 1, column 1) as shown to the user
 
 ### Requirement: Cell color mapping through representative colors
-The system SHALL map each grid cell by computing the average RGB of the cell's source region in the working image, finding the nearest representative color (quantization center), and assigning the bead `colorCode` mapped from that representative color.
+The system SHALL map each grid cell by computing the linear-light average RGB of the cell's source region (the reference value) and assigning the bead `colorCode` that is perceptually nearest among the beads chosen by the active color-selection strategy. A cell SHALL be assigned directly from its own average without routing through an intermediate representative-center indirection.
 
-#### Scenario: Cell assigned via representative color
-- **WHEN** a cell's region average color is closest to representative color R5, and R5 maps to bead code `C7`
+#### Scenario: Cell assigned from its average
+- **WHEN** a cell's region average color is perceptually closest to bead code `C7` among the chosen beads
 - **THEN** that cell stores `C7`
 
 #### Scenario: Consistent grouping
-- **WHEN** two source regions fall under the same representative color
+- **WHEN** two source regions both map to the same chosen bead
 - **THEN** both cells store the same bead `colorCode`, forming a uniform color group
 
 ### Requirement: Interactive viewport with pan and zoom

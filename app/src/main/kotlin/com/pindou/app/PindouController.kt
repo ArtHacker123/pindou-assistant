@@ -82,6 +82,8 @@ class PindouController(private val context: Context) {
 
     val imageType: ImageType get() = generation.imageType
     val paletteName: String? get() = generation.paletteName
+    val colorStrategy: String get() = generation.colorStrategy
+    val colorStrategies get() = generation.colorStrategies
     val colorCountAuto: Boolean get() = generation.colorCountAuto
     val colorCountTarget: Int get() = generation.colorCountTarget
     val gridWidth: Int get() = generation.gridWidth
@@ -252,6 +254,7 @@ class PindouController(private val context: Context) {
 
     fun updateImageType(type: ImageType) = generation.updateImageType(type)
     fun updatePalette(name: String) = generation.updatePalette(name)
+    fun updateColorStrategy(id: String) = generation.updateColorStrategy(id)
     fun updateGridSize(size: Int) = generation.updateGridSize(size)
     fun updateColorCountSelection(isAuto: Boolean, count: Int) =
         generation.updateColorCountSelection(isAuto, count)

@@ -4,26 +4,21 @@ import com.pindou.core.color.ColorSpace
 import com.pindou.core.color.LabColorSpace
 import com.pindou.core.imaging.GridSampler
 import com.pindou.core.imaging.ReferenceBuilder
-import com.pindou.core.imaging.Sampler
-import com.pindou.core.imaging.UniformSampler
-import com.pindou.core.match.PaletteMapper
+import com.pindou.core.match.ColorSelectConfig
+import com.pindou.core.match.ColorStrategyRegistry
 import com.pindou.core.model.Grid
 import com.pindou.core.model.PindouProject
 import com.pindou.core.model.PixelImage
 import com.pindou.core.model.ProjectMeta
 import com.pindou.core.model.toReferenceGrid
-import com.pindou.core.quant.QuantConfig
-import com.pindou.core.quant.QuantizerRegistry
 import com.pindou.core.util.sortedNaturallyBy
 
 /**
  * Turns a **preprocessed** working image into a [PindouProject]:
  *
- *  1. sample pixels and extract N representative colors (quantizer)
- *  2. map each representative color to a real bead color (palette) — this fixes
- *     the set of beads the pattern may use
- *  3. map every grid cell directly to the perceptually closest bead among that
- *     used set
+ *  1. choose the set of bead colors the pattern may use (color-selection
+ *     strategy; reference-direct by default)
+ *  2. map every grid cell to the perceptually closest bead among that used set
  *
  * Preprocessing is intentionally **not** done here: it belongs to the shared
  * imaging path (`ReferenceService` / `ImageProcessorRegistry`) so the same
@@ -31,12 +26,9 @@ import com.pindou.core.util.sortedNaturallyBy
  * the image-type preset twice. Every remaining stage is pluggable.
  */
 class PatternGenerator(
-    private val quantizers: QuantizerRegistry = QuantizerRegistry.default(),
-    private val sampler: Sampler = UniformSampler(),
+    private val strategies: ColorStrategyRegistry = ColorStrategyRegistry.default(),
     private val space: ColorSpace = LabColorSpace,
 ) {
-
-    private val mapper = PaletteMapper(space)
 
     /**
      * Turns the already-preprocessed [image] into a [PindouProject]. Pass an
@@ -50,15 +42,6 @@ class PatternGenerator(
         require(config.gridHeight in 1..MAX_GRID) { "gridHeight must be 1..$MAX_GRID" }
         require(config.palette.items.isNotEmpty()) { "Palette must not be empty" }
 
-        val samples = sampler.sample(image, config.maxSamples)
-        val k = config.colorCountTarget.coerceIn(1, config.palette.size)
-        val centers = quantizers.get(config.quantizerId)
-            .quantize(samples, k, QuantConfig(seed = config.seed))
-
-        // Stage 2 decides which beads the pattern may use.
-        val usedBeads = mapper.mapCenters(centers, config.palette).distinctBy { it.code }
-        val usedRgb = usedBeads.map { it.rgb }
-
         val reusable = reference?.takeIf {
             it.width == config.gridWidth && it.height == config.gridHeight
         }
@@ -68,17 +51,31 @@ class PatternGenerator(
             GridSampler.sample(image, config.gridWidth, config.gridHeight)
         }
 
+        val usedBeads = strategies.get(config.colorStrategy).select(
+            image = image,
+            samples = gridSamples,
+            palette = config.palette,
+            config = ColorSelectConfig(
+                colorCountTarget = config.colorCountTarget,
+                auto = config.colorCountAuto,
+                seed = config.seed,
+                maxSamples = config.maxSamples,
+                quantizerId = config.quantizerId,
+            ),
+        )
+        val usedLab = usedBeads.map { space.encode(it.rgb) }
+
         val cells = ArrayList<String?>(gridSamples.size)
         for (i in 0 until gridSamples.size) {
             if (!gridSamples.valid[i]) {
                 cells.add(null)
                 continue
             }
-            val avg = gridSamples.avgRgb[i]
-            // Stage 3: snap the cell straight to its closest used bead. Going
-            // via the representative center instead can commit a cell to a
-            // visibly farther bead, so we skip that indirection.
-            val idx = space.nearestIndex(avg, usedRgb)
+            // Snap the cell straight to its closest used bead. The used beads are
+            // encoded once above and each cell once here, so no per-candidate
+            // re-encoding happens in the inner loop.
+            val lab = space.encode(gridSamples.avgRgb[i])
+            val idx = space.nearestIndex(lab, usedLab)
             cells.add(if (idx >= 0) usedBeads[idx].code else config.palette.items.first().code)
         }
 
@@ -94,6 +91,7 @@ class PatternGenerator(
             paletteName = config.palette.name,
             paletteVersion = config.palette.version,
             colorCountTarget = config.colorCountTarget,
+            colorStrategy = config.colorStrategy,
             createdAt = config.createdAt,
             name = config.name,
             sourceHash = config.sourceHash,
