@@ -963,7 +963,7 @@ private fun ParamsPanel(
                 label = "图像类型",
                 selected = controller.imageType.displayName,
                 options = ImageType.values().map { it.displayName },
-                enabled = hasSource,
+                enabled = hasSource && !controller.busy,
                 modifier = Modifier.weight(1f),
                 onSelect = { onImageType(ImageType.values()[it]) },
             )
@@ -973,7 +973,7 @@ private fun ParamsPanel(
                     .firstOrNull { it.name == controller.paletteName }
                     ?.displayName ?: "请选择",
                 options = controller.paletteMetas.map { "${it.displayName}（${it.colorCount} 色）" },
-                enabled = true,
+                enabled = !controller.busy,
                 modifier = Modifier.weight(1f),
                 onSelect = { onPalette(controller.paletteMetas[it].name) },
             )
@@ -983,7 +983,7 @@ private fun ParamsPanel(
                 label = "图纸尺寸",
                 selected = "${controller.gridWidth}×${controller.gridHeight}",
                 options = GRID_SIZES.map { "${it}×${it}" },
-                enabled = true,
+                enabled = !controller.busy,
                 modifier = Modifier.weight(1f),
                 onSelect = { onSize(GRID_SIZES[it]) },
             )
@@ -991,7 +991,7 @@ private fun ParamsPanel(
                 label = "用色数量",
                 selected = if (controller.colorCountAuto) "自动" else controller.colorCountTarget.toString(),
                 options = listOf("自动") + COLOR_COUNTS.map { it.toString() },
-                enabled = hasSource,
+                enabled = hasSource && !controller.busy,
                 modifier = Modifier.weight(1f),
                 onSelect = {
                     val auto = it == 0
@@ -1007,7 +1007,7 @@ private fun ParamsPanel(
                     .firstOrNull { it.id == controller.colorStrategy }
                     ?.displayName ?: "参考图直取",
                 options = controller.colorStrategies.map { it.displayName },
-                enabled = hasSource,
+                enabled = hasSource && !controller.busy,
                 modifier = Modifier.weight(1f),
                 onSelect = { onColorStrategy(controller.colorStrategies[it].id) },
             )
