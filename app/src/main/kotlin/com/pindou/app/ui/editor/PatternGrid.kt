@@ -123,16 +123,13 @@ fun PatternGrid(
         if (container.width <= 0 || container.height <= 0) return
         val gw = grid.width * scale
         val gh = grid.height * scale
-        val x = if (gw >= container.width) {
-            offset.x.coerceIn(container.width - gw, 0f)
-        } else {
-            (container.width - gw) / 2f
-        }
-        val y = if (gh >= container.height) {
-            offset.y.coerceIn(container.height - gh, 0f)
-        } else {
-            (container.height - gh) / 2f
-        }
+        // The grid may be dragged out of the viewport until an edge reaches the
+        // display center — i.e. at most half the viewport may be left empty. It
+        // therefore always covers the viewport center and can never be lost.
+        val cx = container.width / 2f
+        val cy = container.height / 2f
+        val x = offset.x.coerceIn(cx - gw, cx)
+        val y = offset.y.coerceIn(cy - gh, cy)
         offset = Offset(x, y)
     }
 

@@ -49,25 +49,28 @@ import androidx.compose.ui.unit.dp
 import com.pindou.app.PindouController
 import com.pindou.app.data.toPixelImage
 import android.graphics.Bitmap
-import android.graphics.Rect
 import android.graphics.RectF
 import kotlin.math.min
 import kotlin.math.roundToInt
 
 /** Minimum crop-window edge, in screen px. */
 private const val MIN_WINDOW_PX = 32f
-/** Scale value tolerances: within this distance of fit the view is "full". */
-private const val FULL_VIEW_EPS = 0.001f
+/** How far below the full-fit view the image may be zoomed out. */
+private const val MIN_ZOOM_RATIO = 0.5f
 
 private enum class Corner { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
 
 private enum class GestureMode { PAN, MOVE_CROP, PINCH }
 
 /**
- * Crop screen. A fixed on-screen crop [window] stays put while the image
- * (scale/offset) transforms underneath it. The image scale never drops below
- * the full-fit level, and its translation is always edge-constrained so the
- * full-fit state is naturally "locked" (smaller axes are auto-centered).
+ * Crop screen. A crop [window] fixed in viewport space stays put while the
+ * image (scale/offset) transforms underneath it, so the box always covers the
+ * same on-screen area regardless of zoom. The image may zoom from half the
+ * full-fit view up to 12x, and its translation is edge-constrained; when the
+ * image is smaller than the viewport it is auto-centered. Zooming never resizes
+ * the crop window; if the selection extends past the (possibly zoomed-out)
+ * image, the confirm step keeps the full selection and pads the out-of-image
+ * region with transparent pixels.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -120,23 +123,16 @@ fun CropScreen(controller: PindouController) {
 
     fun clampedWindow() {
         if (container.width <= 0 || container.height <= 0) return
-        val img = RectF(offset.x, offset.y, offset.x + iw * scale, offset.y + ih * scale)
-        if (img.width() <= 0f || img.height() <= 0f) return
-        // The crop window may only occupy the visible picture area:
-        // the intersection of the on-screen image rect and the viewport.
-        val region = RectF(
-            maxOf(img.left, 0f),
-            maxOf(img.top, 0f),
-            minOf(img.right, container.width.toFloat()),
-            minOf(img.bottom, container.height.toFloat()),
-        )
-        if (region.width() <= 0f || region.height() <= 0f) return
-        val minW = minOf(MIN_WINDOW_PX, region.width())
-        val minH = minOf(MIN_WINDOW_PX, region.height())
-        val w = maxOf(window.right - window.left, minW).coerceAtMost(region.width())
-        val h = maxOf(window.bottom - window.top, minH).coerceAtMost(region.height())
-        val l = window.left.coerceIn(region.left, maxOf(region.left, region.right - w))
-        val t = window.top.coerceIn(region.top, maxOf(region.top, region.bottom - h))
+        // The crop window lives in viewport space and may extend past the
+        // (possibly smaller) image; it is only kept on screen.
+        val vw = container.width.toFloat()
+        val vh = container.height.toFloat()
+        val minW = minOf(MIN_WINDOW_PX, vw)
+        val minH = minOf(MIN_WINDOW_PX, vh)
+        val w = maxOf(window.right - window.left, minW).coerceAtMost(vw)
+        val h = maxOf(window.bottom - window.top, minH).coerceAtMost(vh)
+        val l = window.left.coerceIn(0f, maxOf(0f, vw - w))
+        val t = window.top.coerceIn(0f, maxOf(0f, vh - h))
         window = RectF(l, t, l + w, t + h)
     }
 
@@ -188,20 +184,15 @@ fun CropScreen(controller: PindouController) {
                                         val centroid = (p0 + p1) / 2f
                                         val prev = lastDist
                                         if (prev != null && prev > 0f && dist > 0f) {
-                                            val newScale = (scale * (dist / prev)).coerceIn(fitScale, fitScale * 12f)
-                                            if (newScale <= fitScale + FULL_VIEW_EPS) {
-                                                // Reached the floor: snap back to the canonical full view.
-                                                scale = fitScale
-                                                offset = fitOffset
-                                            } else {
-                                                val k = newScale / scale
-                                                val anchor = lastCentroid ?: centroid
-                                                offset = Offset(
-                                                    centroid.x - (anchor.x - offset.x) * k,
-                                                    centroid.y - (anchor.y - offset.y) * k,
-                                                )
-                                                scale = newScale
-                                            }
+                                            val newScale = (scale * (dist / prev))
+                                                .coerceIn(fitScale * MIN_ZOOM_RATIO, fitScale * 12f)
+                                            val k = newScale / scale
+                                            val anchor = lastCentroid ?: centroid
+                                            offset = Offset(
+                                                centroid.x - (anchor.x - offset.x) * k,
+                                                centroid.y - (anchor.y - offset.y) * k,
+                                            )
+                                            scale = newScale
                                             clampImage()
                                             clampedWindow()
                                         }
@@ -308,22 +299,24 @@ fun CropScreen(controller: PindouController) {
                 Button(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     onClick = {
-                        val l = ((window.left - offset.x) / scale).coerceIn(0f, iw)
-                        val t = ((window.top - offset.y) / scale).coerceIn(0f, ih)
-                        val r = ((window.right - offset.x) / scale).coerceIn(0f, iw)
-                        val b = ((window.bottom - offset.y) / scale).coerceIn(0f, ih)
-                        val rect = Rect(
-                            l.toInt().coerceIn(0, bitmap.width - 1),
-                            t.toInt().coerceIn(0, bitmap.height - 1),
-                            r.toInt().coerceIn(1, bitmap.width),
-                            b.toInt().coerceIn(1, bitmap.height),
+                        // Map the crop window into source pixels. The selection
+                        // may extend beyond the image (when zoomed out); the
+                        // output keeps the full selection size and fills the
+                        // out-of-image region with transparent pixels.
+                        val srcLeft = (window.left - offset.x) / scale
+                        val srcTop = (window.top - offset.y) / scale
+                        val srcRight = (window.right - offset.x) / scale
+                        val srcBottom = (window.bottom - offset.y) / scale
+                        val outW = (srcRight - srcLeft).roundToInt().coerceAtLeast(1)
+                        val outH = (srcBottom - srcTop).roundToInt().coerceAtLeast(1)
+                        val out = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
+                        android.graphics.Canvas(out).drawBitmap(
+                            bitmap,
+                            null,
+                            RectF(-srcLeft, -srcTop, iw - srcLeft, ih - srcTop),
+                            null,
                         )
-                        val left = minOf(rect.left, rect.right - 1)
-                        val top = minOf(rect.top, rect.bottom - 1)
-                        val w = (rect.right - left).coerceAtLeast(1)
-                        val h = (rect.bottom - top).coerceAtLeast(1)
-                        val cropped = Bitmap.createBitmap(bitmap, left, top, w, h)
-                        controller.onCropConfirmed(cropped.toPixelImage())
+                        controller.onCropConfirmed(out.toPixelImage())
                     },
                 ) { Text("确认") }
             }
