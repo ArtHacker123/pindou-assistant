@@ -17,5 +17,5 @@
 ## 4. Verification
 
 - [x] 4.1 `:core:test :app:assembleDebug` passes
-- [ ] 4.2 Install the APK and have the user verify: the 关于与隐私 entry sits below the tip card, opens the page, the note reads correctly, and back returns home
+- [x] 4.2 Install the APK and have the user verify: the 关于与隐私 entry sits below the tip card, opens the page, the note reads correctly, and back returns home
 - [x] 4.3 Re-validate the change `--strict`
