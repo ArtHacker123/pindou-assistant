@@ -28,6 +28,7 @@ import com.pindou.core.model.Palette
 import com.pindou.core.model.PindouProject
 import com.pindou.core.model.PixelImage
 import com.pindou.core.model.ProjectMeta
+import com.pindou.core.palette.PaletteDefaults
 import com.pindou.core.palette.PaletteMeta
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -326,7 +327,7 @@ class PindouController(private val context: Context) {
 
     /** Starts a pattern from a built-in template, keeping the template's own size, in view mode. */
     fun startTemplateCreation(template: PindouTemplate) {
-        val paletteName = paletteMetas.firstOrNull()?.name ?: return
+        val paletteName = PaletteDefaults.defaultMeta(paletteMetas)?.name ?: return
         val palette = generation.paletteFor(paletteName) ?: return
         val w = template.width
         val h = template.height

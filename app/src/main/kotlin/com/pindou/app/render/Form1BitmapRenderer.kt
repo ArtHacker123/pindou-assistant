@@ -23,6 +23,8 @@ object Form1BitmapRenderer {
     private const val GRID_LINE_COLOR = 0xFF444444.toInt()
     private const val TABLE_GAP = 20
     private const val EMPTY_CELL_BG = 0xFFF5F5F5.toInt()
+    private const val CELL_CODE_FILL = 0.9f
+    private const val CELL_CODE_MIN_PX = 8f
 
     // Form 2 group-grid palette (matches PatternGrid.kt).
     private const val BASE_LINE_COLOR = 0x55000000.toInt()
@@ -277,14 +279,24 @@ object Form1BitmapRenderer {
                 canvas.drawRect(left.toFloat(), top.toFloat(), (left + cell).toFloat(), (top + cell).toFloat(), fill)
 
                 if (cell >= 24) {
-                    val cx = left + cell / 2f
-                    val fm = codePaint.fontMetrics
-                    val cy = top + cell / 2f - (fm.ascent + fm.descent) / 2f
-                    val dark = rgb.luminance() >= 140
-                    codePaint.color = if (dark) Color.BLACK else Color.WHITE
-                    strokePaint.color = if (dark) Color.WHITE else Color.BLACK
-                    canvas.drawText(code, cx, cy, strokePaint)
-                    canvas.drawText(code, cx, cy, codePaint)
+                    val baseTextSize = (cell * 0.45f).coerceAtLeast(9f)
+                    val target = cell * CELL_CODE_FILL
+                    codePaint.textSize = baseTextSize
+                    val measured = codePaint.measureText(code)
+                    val textSize = if (measured > target) baseTextSize * target / measured else baseTextSize
+                    if (textSize >= CELL_CODE_MIN_PX) {
+                        codePaint.textSize = textSize
+                        strokePaint.textSize = textSize
+                        strokePaint.strokeWidth = (textSize * 0.16f).coerceAtLeast(1f)
+                        val cx = left + cell / 2f
+                        val fm = codePaint.fontMetrics
+                        val cy = top + cell / 2f - (fm.ascent + fm.descent) / 2f
+                        val dark = rgb.luminance() >= 140
+                        codePaint.color = if (dark) Color.BLACK else Color.WHITE
+                        strokePaint.color = if (dark) Color.WHITE else Color.BLACK
+                        canvas.drawText(code, cx, cy, strokePaint)
+                        canvas.drawText(code, cx, cy, codePaint)
+                    }
                 }
             }
         }

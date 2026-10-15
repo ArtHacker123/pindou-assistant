@@ -16,6 +16,7 @@ import com.pindou.core.match.ColorStrategyRegistry
 import com.pindou.core.model.Palette
 import com.pindou.core.model.PindouProject
 import com.pindou.core.model.PixelImage
+import com.pindou.core.palette.PaletteDefaults
 import com.pindou.core.palette.PaletteMeta
 import com.pindou.core.palette.PaletteRegistry
 import kotlinx.coroutines.CoroutineScope
@@ -58,7 +59,7 @@ class GenerationSession(
 
     // Generation parameters (two-way bound by the merged parameter/pattern screen).
     var imageType by mutableStateOf(ImageType.CARTOON)
-    var paletteName by mutableStateOf(paletteMetas.firstOrNull()?.name)
+    var paletteName by mutableStateOf(PaletteDefaults.defaultMeta(paletteMetas)?.name)
     var colorStrategy by mutableStateOf(ColorStrategyRegistry.DEFAULT_ID)
     var colorCountAuto by mutableStateOf(true)
     var colorCountTarget by mutableStateOf(16)

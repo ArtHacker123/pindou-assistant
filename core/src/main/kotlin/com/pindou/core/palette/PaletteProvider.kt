@@ -27,10 +27,10 @@ class PaletteRegistry(private val provider: PaletteProvider) {
     fun load(name: String): Palette =
         cache.getOrPut(name) { provider.load(name) }
 
-    /** The first available palette, used as the default selection. */
+    /** The default palette (pinned by name), used as the default selection. */
     fun default(): Palette {
-        val first = available().firstOrNull()
+        val meta = PaletteDefaults.defaultMeta(available())
             ?: error("No palettes available")
-        return load(first.name)
+        return load(meta.name)
     }
 }

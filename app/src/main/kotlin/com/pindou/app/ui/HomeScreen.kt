@@ -48,6 +48,7 @@ import com.pindou.app.data.ExportManager
 import com.pindou.app.data.PatternEntry
 import com.pindou.app.data.PindouTemplate
 import com.pindou.app.data.TEMPLATES
+import com.pindou.core.palette.PaletteDefaults
 
 private val FREE_SIZES = listOf(15, 29, 52, 58, 78, 104, 116, 128)
 private const val FREE_DEFAULT_SIZE = 52
@@ -479,7 +480,7 @@ private fun FreeCreationDialog(
     onConfirm: (paletteName: String, size: Int) -> Unit,
 ) {
     val metas = controller.paletteMetas
-    var paletteName by remember { mutableStateOf(metas.firstOrNull()?.name.orEmpty()) }
+    var paletteName by remember { mutableStateOf(PaletteDefaults.defaultMeta(metas)?.name.orEmpty()) }
     var size by remember { mutableStateOf(FREE_DEFAULT_SIZE) }
 
     AlertDialog(

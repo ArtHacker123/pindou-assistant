@@ -11,6 +11,7 @@ import com.pindou.core.model.PindouProject
 import com.pindou.core.model.PixelImage
 import com.pindou.core.model.ReferenceGrid
 import com.pindou.core.model.toReferenceGrid
+import com.pindou.core.palette.PaletteDefaults
 
 /** The editing tools available in edit mode. */
 enum class EditTool(val label: String) {
@@ -69,9 +70,7 @@ class EditingSession(
     private var refCacheImage: PixelImage? = null
 
     fun enter() {
-        if (brushCode == null) {
-            brushCode = documents.project?.let { defaultBrushCode(it) }
-        }
+        brushCode = documents.project?.let { defaultBrushCode(it) }
         editMode = true
     }
 
@@ -101,9 +100,9 @@ class EditingSession(
         cursor = null
     }
 
-    /** The palette color closest to pure black, used as the default brush. */
+    /** The palette's black bead (by name, else nearest pure black), used as the default brush. */
     fun defaultBrushCode(project: PindouProject): String? =
-        project.paletteSource.items.minByOrNull { it.r + it.g + it.b }?.code
+        PaletteDefaults.defaultBrushItem(project.paletteSource)?.code
 
     /** Starts a drag stroke (called by the grid on finger-down); edits coalesce into one undo step. */
     fun beginStroke() {
@@ -263,6 +262,7 @@ class EditingSession(
             GridEditor.remap(project.grid, project.paletteSource, palette),
             palette,
         )
+        brushCode = PaletteDefaults.defaultBrushItem(palette)?.code
         redoStack.clear()
         refreshHistory()
     }

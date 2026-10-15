@@ -36,6 +36,8 @@ import kotlin.math.floor
 import kotlin.math.max
 
 private const val MAX_CELL_PX = 128f
+private const val CELL_CODE_FILL = 0.9f
+private const val CELL_CODE_MIN_PX = 8f
 private const val GROUP = 10
 private const val HALF_GROUP = GROUP / 2
 private const val EMPTY_ALPHA = 8
@@ -99,6 +101,7 @@ fun PatternGrid(
     val density = LocalDensity.current
     val cursorColor = MaterialTheme.colorScheme.primary
     val textCache = remember(project) { HashMap<String, TextLayoutResult>() }
+    val skippedCode = remember(project) { HashSet<String>() }
 
     var container by remember { mutableStateOf(IntSize.Zero) }
     var fitScale by remember { mutableFloatStateOf(1f) }
@@ -139,6 +142,44 @@ fun PatternGrid(
         val prev = refitKey
         refitKey = dims to container
         if (prev == null || prev.first != dims) refit() else clampOffset()
+    }
+
+    // Shrinks a cell's code label to fit its cell, or returns null when the
+    // fitted size would be unreadable. Results are cached per code + cell size.
+    fun codeLayout(code: String, cell: Float): TextLayoutResult? {
+        val key = "$code#${cell.toInt()}"
+        textCache[key]?.let { return it }
+        if (key in skippedCode) return null
+        val ink = inkByCode[code] ?: Color.Black
+        val naturalPx = cell * 0.45f
+        val first = textMeasurer.measure(
+            text = AnnotatedString(code),
+            style = TextStyle(
+                color = ink,
+                fontSize = with(density) { naturalPx.toSp() },
+                fontWeight = FontWeight.Bold,
+            ),
+        )
+        val target = cell * CELL_CODE_FILL
+        val fittedPx = if (first.size.width > target) naturalPx * target / first.size.width else naturalPx
+        if (fittedPx < CELL_CODE_MIN_PX) {
+            skippedCode.add(key)
+            return null
+        }
+        val result = if (fittedPx >= naturalPx - 0.01f) {
+            first
+        } else {
+            textMeasurer.measure(
+                text = AnnotatedString(code),
+                style = TextStyle(
+                    color = ink,
+                    fontSize = with(density) { fittedPx.toSp() },
+                    fontWeight = FontWeight.Bold,
+                ),
+            )
+        }
+        textCache[key] = result
+        return result
     }
 
     Canvas(
@@ -566,18 +607,7 @@ fun PatternGrid(
             for (r in r0 until r1) {
                 for (c in c0 until c1) {
                     val code = grid[r, c] ?: continue
-                    val textPx = cell * 0.45f
-                    val key = "$code#${textPx.toInt()}"
-                    val layout = textCache.getOrPut(key) {
-                        textMeasurer.measure(
-                            text = AnnotatedString(code),
-                            style = TextStyle(
-                                color = inkByCode[code] ?: Color.Black,
-                                fontSize = with(density) { textPx.toSp() },
-                                fontWeight = FontWeight.Bold,
-                            ),
-                        )
-                    }
+                    val layout = codeLayout(code, cell) ?: continue
                     val x = offset.x + c * cell + (cell - layout.size.width) / 2f
                     val y = offset.y + r * cell + (cell - layout.size.height) / 2f
                     drawText(layout, topLeft = Offset(x, y))

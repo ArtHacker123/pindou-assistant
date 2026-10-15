@@ -46,7 +46,7 @@
 
 > 来源：D13、D14 与 Open Questions。
 
-- [ ] E1 多品牌 / 多套色板可选（架构支持 `PaletteProvider`，当前仅 MARD 221）
+- [x] E1 多品牌 / 多套色板可选（架构支持 `PaletteProvider`，当前仅 MARD 221）
 - [ ] E2 CIEDE2000 替代 dE76（同一 `ColorSpace` seam；更准但更重）—— 已先以 **Oklab** 取代 dE76 作为默认度量（`cell-reduction-and-oklab`），CIEDE2000 仍是候补
 - [ ] E3 UI 暴露随机种子开关（当前固定用 `sourceHash` 派生）
 
