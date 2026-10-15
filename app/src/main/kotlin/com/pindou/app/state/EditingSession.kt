@@ -79,6 +79,7 @@ class EditingSession(
     }
 
     fun selectTool(value: EditTool) {
+        if (value != EditTool.ERASE) eraseConnected = false
         tool = value
     }
 
