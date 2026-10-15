@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Colorize
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FindReplace
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -738,6 +739,7 @@ private fun EditTool.icon(): ImageVector = when (this) {
     EditTool.ERASE -> ImageVector.vectorResource(R.drawable.ic_eraser)
     EditTool.EYEDROPPER -> Icons.Filled.Colorize
     EditTool.BUCKET -> Icons.Filled.FormatColorFill
+    EditTool.REPLACE -> Icons.Filled.FindReplace
     EditTool.MOVE -> Icons.Filled.PanTool
 }
 
@@ -818,7 +820,7 @@ private fun FloatingToolbar(
     onMove: (Offset) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val drawTools = listOf(EditTool.PAINT, EditTool.ERASE, EditTool.EYEDROPPER, EditTool.BUCKET)
+    val drawTools = listOf(EditTool.PAINT, EditTool.ERASE, EditTool.EYEDROPPER, EditTool.BUCKET, EditTool.REPLACE)
     val shape = RoundedCornerShape(10.dp)
     Box(
         modifier = modifier

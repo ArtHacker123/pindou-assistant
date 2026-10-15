@@ -110,6 +110,55 @@ class GridEditorTest {
         assertSame(g, GridEditor.regionErase(g, 0, 0))
     }
 
+    // ---- replace all ------------------------------------------------------
+
+    @Test
+    fun `replaceAll changes every matching cell everywhere`() {
+        val g = grid(
+            3, 3,
+            "A", "B", "A",
+            "B", "B", "A",
+            "C", "A", "B",
+        )
+        val out = GridEditor.replaceAll(g, "A", "X")
+        assertEquals("X", out[0, 0])
+        assertEquals("X", out[0, 2])
+        assertEquals("X", out[1, 2])
+        assertEquals("X", out[2, 1])
+        assertEquals("B", out[0, 1])
+        assertEquals("C", out[2, 0])
+    }
+
+    @Test
+    fun `replaceAll replaces disconnected cells of the same code`() {
+        val g = grid(3, 1, "A", "B", "A")
+        val out = GridEditor.replaceAll(g, "A", "X")
+        assertEquals("X", out[0, 0])
+        assertEquals("B", out[0, 1])
+        assertEquals("X", out[0, 2])
+    }
+
+    @Test
+    fun `replaceAll keeps holes and other codes`() {
+        val g = grid(3, 1, "A", null, "B")
+        val out = GridEditor.replaceAll(g, "A", "X")
+        assertEquals("X", out[0, 0])
+        assertNull(out[0, 1])
+        assertEquals("B", out[0, 2])
+    }
+
+    @Test
+    fun `replaceAll with the same code is a no-op`() {
+        val g = grid(2, 1, "A", "B")
+        assertSame(g, GridEditor.replaceAll(g, "A", "A"))
+    }
+
+    @Test
+    fun `replaceAll with no match returns the same instance`() {
+        val g = grid(2, 1, "A", "B")
+        assertSame(g, GridEditor.replaceAll(g, "Z", "X"))
+    }
+
     // ---- remap ------------------------------------------------------------
 
     @Test

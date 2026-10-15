@@ -18,6 +18,7 @@ enum class EditTool(val label: String) {
     ERASE("橡皮"),
     EYEDROPPER("取色"),
     BUCKET("油漆桶"),
+    REPLACE("替换"),
     MOVE("移动"),
 }
 
@@ -169,8 +170,32 @@ class EditingSession(
                 }
             }
 
+            EditTool.REPLACE -> {
+                val grid = project.grid
+                if (row in 0 until grid.height && col in 0 until grid.width) {
+                    val source = grid[row, col]
+                    val target = brushCode
+                    if (source != null && target != null) replaceColor(source, target)
+                }
+            }
+
             EditTool.MOVE -> Unit
         }
+    }
+
+    /**
+     * Replaces every bead of [from] with [to] across the whole pattern as a
+     * single undoable step. A no-op — no matching bead, or [from] == [to] —
+     * records no history.
+     */
+    fun replaceColor(from: String, to: String) {
+        val project = documents.project ?: return
+        val next = GridEditor.replaceAll(project.grid, from, to)
+        if (next === project.grid) return
+        pushUndo(project.grid)
+        documents.replaceGrid(next)
+        redoStack.clear()
+        refreshHistory()
     }
 
     /** Applies a grid op inside the stroke scratch; a standalone tap begins and ends a mini-stroke. */

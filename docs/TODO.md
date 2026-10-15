@@ -23,7 +23,7 @@
 
 - [x] B1 完整图纸编辑：涂 / 擦 / 替换（paint / erase / replace）单个或多个格子 —— 画笔 / 橡皮（单格 + 区域擦除）/ 油漆桶（flood fill）/ 取色 / 移动（`add-pattern-editing`、`connected-region-erase`）
 - [x] B2 基于参考图创作：导入参考图后手工编辑珠子网格（参考图作底层，编辑层叠其上）（`add-grid-reference-image`、`reference-image-via-crop`、`refine-reference-import`）
-- [ ] B3 "把某色号全部替换为另一色号"（D1 明确预留的跨设备能力）
+- [x] B3 "把某色号全部替换为另一色号"（D1 明确预留的跨设备能力）（`add-global-color-replace`：替换工具，源=点击格色号、目标=当前画笔色，一步撤销）
 - [x] B4 编辑历史：撤销 / 重做（`EditingSession` 历史，每笔一步，上限 100）
 
 ## C. 图像输入
