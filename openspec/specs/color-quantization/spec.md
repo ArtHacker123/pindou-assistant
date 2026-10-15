@@ -38,7 +38,7 @@ When the K-means strategy is selected, the system SHALL sample pixels uniformly 
 
 #### Scenario: Reference-direct uses cell samples
 - **WHEN** reference-direct selection runs
-- **THEN** it uses the per-cell reference averages already computed for the grid, with no additional uniform sampling of the working image
+- **THEN** it uses the per-cell representatives already computed for the grid, with no additional uniform sampling of the working image
 
 ### Requirement: Deterministic quantization via seeding
 The system SHALL support deterministic quantization so that repeated runs on the same input with the same parameters can produce the same representative colors.
@@ -48,18 +48,18 @@ The system SHALL support deterministic quantization so that repeated runs on the
 - **THEN** the representative colors and the resulting grid are identical to the previous run
 
 ### Requirement: Perceptual color comparison and averaging
-The system SHALL compare and average colors in spaces that match human perception: relative color comparisons SHALL run in CIELAB (dE76) and spatial area averaging SHALL run in linear light, so nearest-bead picks and cell averages agree with human vision instead of raw sRGB arithmetic.
+The system SHALL compare and average colors in spaces that match human perception: relative color comparisons SHALL run in the Oklab space and spatial area averaging SHALL run in linear light, so nearest-bead picks and cell averages agree with human vision instead of raw sRGB arithmetic. The CIELAB (dE76) space MAY be retained as an alternative comparison space for reference and testing.
 
 #### Scenario: Nearest bead follows perception
 - **WHEN** a representative color sits between two bead palette entries
-- **THEN** the bead whose perceived difference is smallest (per dE76) is chosen, which is not always the nearest raw-sRGB entry
+- **THEN** the bead whose perceived Oklab difference is smallest is chosen, which is not always the nearest raw-sRGB entry
 
 #### Scenario: Cell average stays bright when mixing light and dark pixels
 - **WHEN** a grid cell covers an equal mix of black and white pixels
 - **THEN** the averaged color is the physically correct light midtone (~188), not the too-dark sRGB mean (~128)
 
 #### Scenario: Cells snap to the used bead set
-- **WHEN** a cell's average color is mapped after the representative beads are fixed
+- **WHEN** a cell's representative color is mapped after the representative beads are fixed
 - **THEN** the cell is assigned the perceptually closest bead among the beads already used by the pattern, without the extra cell-to-center indirection
 
 ### Requirement: Fall back to automatic when the color count is unset
@@ -84,7 +84,7 @@ When a project carries no usable color-count target (a non-positive value, as st
 
 ### Requirement: Color-selection strategies with reference-direct default
 
-The system SHALL choose the set of bead colors a pattern may use through a selectable color-selection strategy, and SHALL default to selecting directly from the reference image. Reference-direct selection SHALL map each valid cell's reference average to the perceptually nearest bead in the full palette; when the color count is automatic the used set SHALL contain every bead that appears (no cap); when a manual count N is set the system SHALL choose the N beads that best represent the cells by greedy maximum coverage — repeatedly adding the bead that most reduces the total perceptual distance of snapping every cell to the chosen set — and re-map every cell to the nearest bead within that set. Rare but visually distinct colors SHALL be eligible to be kept even when their area is small (selection SHALL NOT be a pure frequency ranking). Reference-direct selection SHALL be deterministic (ties broken by natural color-code order) and SHALL NOT require a seed.
+The system SHALL choose the set of bead colors a pattern may use through a selectable color-selection strategy, and SHALL default to selecting directly from the reference image. Reference-direct selection SHALL map each valid cell's representative color to the perceptually nearest bead in the full palette; when the color count is automatic the used set SHALL contain every bead that appears (no cap); when a manual count N is set the system SHALL choose the N beads that best represent the cells by greedy maximum coverage — repeatedly adding the bead that most reduces the total perceptual distance of snapping every cell to the chosen set — and re-map every cell to the nearest bead within that set. Rare but visually distinct colors SHALL be eligible to be kept even when their area is small (selection SHALL NOT be a pure frequency ranking). Reference-direct selection SHALL be deterministic (ties broken by natural color-code order) and SHALL NOT require a seed.
 
 #### Scenario: Default strategy is reference-direct
 - **WHEN** generation runs without the user choosing a color-selection strategy
