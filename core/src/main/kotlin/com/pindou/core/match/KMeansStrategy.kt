@@ -1,7 +1,7 @@
 package com.pindou.core.match
 
 import com.pindou.core.color.ColorSpace
-import com.pindou.core.color.LabColorSpace
+import com.pindou.core.color.OklabColorSpace
 import com.pindou.core.imaging.GridSamples
 import com.pindou.core.imaging.Sampler
 import com.pindou.core.imaging.UniformSampler
@@ -19,7 +19,7 @@ import com.pindou.core.quant.QuantizerRegistry
 class KMeansStrategy(
     private val quantizers: QuantizerRegistry = QuantizerRegistry.default(),
     private val sampler: Sampler = UniformSampler(),
-    space: ColorSpace = LabColorSpace,
+    space: ColorSpace = OklabColorSpace,
 ) : ColorStrategy {
 
     private val mapper = PaletteMapper(space)

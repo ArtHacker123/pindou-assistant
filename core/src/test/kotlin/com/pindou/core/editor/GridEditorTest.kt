@@ -147,7 +147,7 @@ class GridEditorTest {
     fun `eyedropper snaps a reference hole to the nearest palette color`() {
         val target = palette(item("RED", 255, 0, 0), item("BLU", 0, 0, 255))
         val g = grid(1, 1, null)
-        val reference = PixelImage(1, 1, intArrayOf(0xFF0A0505.toInt())) // near-black red
+        val reference = PixelImage(1, 1, intArrayOf(0xFFCC1818.toInt())) // red-leaning
         assertEquals("RED", GridEditor.pick(g, reference, target, row = 0, col = 0))
     }
 
@@ -170,7 +170,7 @@ class GridEditorTest {
     fun `eyedropper with prefer-reference takes the reference color over a bead`() {
         val target = palette(item("RED", 255, 0, 0), item("BLU", 0, 0, 255))
         val g = grid(1, 1, "BLU")
-        val reference = PixelImage(1, 1, intArrayOf(0xFF0A0505.toInt())) // near-black red
+        val reference = PixelImage(1, 1, intArrayOf(0xFFCC1818.toInt())) // red-leaning
         assertEquals("RED", GridEditor.pick(g, reference, target, preferReference = true, row = 0, col = 0))
     }
 

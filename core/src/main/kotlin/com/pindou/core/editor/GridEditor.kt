@@ -1,7 +1,7 @@
 package com.pindou.core.editor
 
 import com.pindou.core.color.ColorSpace
-import com.pindou.core.color.LabColorSpace
+import com.pindou.core.color.OklabColorSpace
 import com.pindou.core.model.Grid
 import com.pindou.core.model.Palette
 import com.pindou.core.model.PixelImage
@@ -85,7 +85,7 @@ object GridEditor {
         grid: Grid,
         source: Palette,
         target: Palette,
-        space: ColorSpace = LabColorSpace,
+        space: ColorSpace = OklabColorSpace,
     ): Grid {
         if (target.items.isEmpty()) return grid
         val candidates = target.items.map { it.rgb }
@@ -121,7 +121,7 @@ object GridEditor {
         grid: Grid,
         reference: PixelImage?,
         target: Palette,
-        space: ColorSpace = LabColorSpace,
+        space: ColorSpace = OklabColorSpace,
         preferReference: Boolean = false,
         row: Int,
         col: Int,

@@ -1,8 +1,10 @@
 package com.pindou.core.generate
 
 import com.pindou.core.color.ColorSpace
-import com.pindou.core.color.LabColorSpace
+import com.pindou.core.color.OklabColorSpace
+import com.pindou.core.imaging.CellReduction
 import com.pindou.core.imaging.GridSampler
+import com.pindou.core.imaging.ImageType
 import com.pindou.core.imaging.ReferenceBuilder
 import com.pindou.core.match.ColorSelectConfig
 import com.pindou.core.match.ColorStrategyRegistry
@@ -27,28 +29,37 @@ import com.pindou.core.util.sortedNaturallyBy
  */
 class PatternGenerator(
     private val strategies: ColorStrategyRegistry = ColorStrategyRegistry.default(),
-    private val space: ColorSpace = LabColorSpace,
+    private val space: ColorSpace = OklabColorSpace,
 ) {
 
     /**
-     * Turns the already-preprocessed [image] into a [PindouProject]. Pass an
-     * existing grid-resolution [reference] (built by `ReferenceService` for the
-     * same preprocessed image and grid size) to skip the per-cell averaging
-     * pass: it is reused for both the emitted reference image and cell snapping.
-     * It is ignored when its dimensions do not match the requested grid.
+     * Turns the already-preprocessed [image] into a [PindouProject].
+     *
+     * Cartoon images reduce each cell to its most frequent palette color (mode),
+     * which keeps solid shapes and thin outlines crisp; photos average the cell
+     * in linear light to keep tonal gradients. Pass an existing grid-resolution
+     * [reference] (built by `ReferenceService` for the same preprocessed image
+     * and grid size) to skip the per-cell averaging pass: it is reused for both
+     * the emitted reference image and cell snapping — but only for averaging,
+     * since a mode cannot be recovered from an averaged image. It is also
+     * ignored when its dimensions do not match the requested grid.
      */
     fun generate(image: PixelImage, config: GenerateConfig, reference: PixelImage? = null): PindouProject {
         require(config.gridWidth in 1..MAX_GRID) { "gridWidth must be 1..$MAX_GRID" }
         require(config.gridHeight in 1..MAX_GRID) { "gridHeight must be 1..$MAX_GRID" }
         require(config.palette.items.isNotEmpty()) { "Palette must not be empty" }
 
-        val reusable = reference?.takeIf {
-            it.width == config.gridWidth && it.height == config.gridHeight
+        val mode = config.imageType == ImageType.CARTOON
+        val reduction = if (mode) CellReduction.MODE else CellReduction.AVERAGE
+        val reusable = if (mode) {
+            null
+        } else {
+            reference?.takeIf { it.width == config.gridWidth && it.height == config.gridHeight }
         }
         val gridSamples = if (reusable != null) {
             GridSampler.fromReference(reusable)
         } else {
-            GridSampler.sample(image, config.gridWidth, config.gridHeight)
+            GridSampler.sample(image, config.gridWidth, config.gridHeight, reduction, config.palette)
         }
 
         val usedBeads = strategies.get(config.colorStrategy).select(
@@ -73,8 +84,9 @@ class PatternGenerator(
             }
             // Snap the cell straight to its closest used bead. The used beads are
             // encoded once above and each cell once here, so no per-candidate
-            // re-encoding happens in the inner loop.
-            val lab = space.encode(gridSamples.avgRgb[i])
+            // re-encoding happens in the inner loop. Snapping uses the
+            // representative color (mode for cartoons, average for photos).
+            val lab = space.encode(gridSamples.rep(i))
             val idx = space.nearestIndex(lab, usedLab)
             cells.add(if (idx >= 0) usedBeads[idx].code else config.palette.items.first().code)
         }

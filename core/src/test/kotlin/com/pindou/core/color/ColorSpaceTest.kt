@@ -46,6 +46,31 @@ class ColorSpaceTest {
     }
 
     @Test
+    fun `oklab encode round trips through decode`() {
+        val colors = listOf(
+            Rgb(0, 0, 0), Rgb(255, 255, 255), Rgb(128, 128, 128),
+            Rgb(255, 0, 0), Rgb(0, 255, 0), Rgb(0, 0, 255),
+            Rgb(250, 245, 205), Rgb(20, 90, 140),
+        )
+        for (c in colors) {
+            val back = OklabColorSpace.decode(OklabColorSpace.encode(c))
+            assertTrue("round trip for $c drifted to $back", closeEnough(c, back, tolerance = 1))
+        }
+    }
+
+    @Test
+    fun `oklab lightness anchors black and white at zero and one`() {
+        assertEquals(0.0, OklabColorSpace.encode(Rgb(0, 0, 0))[0], 1e-6)
+        assertEquals(1.0, OklabColorSpace.encode(Rgb(255, 255, 255))[0], 1e-3)
+    }
+
+    @Test
+    fun `oklab picks the perceptually closer candidate`() {
+        val candidates = listOf(Rgb(255, 0, 0), Rgb(130, 130, 130))
+        assertEquals(1, OklabColorSpace.nearestIndex(Rgb(128, 128, 128), candidates))
+    }
+
+    @Test
     fun `nearest index returns minus one when empty`() {
         assertEquals(-1, LabColorSpace.nearestIndex(Rgb(1, 2, 3), emptyList()))
     }

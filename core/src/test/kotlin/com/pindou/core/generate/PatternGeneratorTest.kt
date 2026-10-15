@@ -190,6 +190,48 @@ class PatternGeneratorTest {
     }
 
     @Test
+    fun `cartoon boundary cell snaps to a real bead not a synthesized midtone`() {
+        // One cell covering an equal mix of black and white.
+        val image = PixelImage(2, 1, intArrayOf(0xFF000000.toInt(), 0xFFFFFFFF.toInt()))
+        val project = PatternGenerator().generate(
+            image,
+            GenerateConfig(
+                gridWidth = 1,
+                gridHeight = 1,
+                palette = TestPalettes.basic(),
+                colorCountTarget = 2,
+                colorCountAuto = true,
+                imageType = ImageType.CARTOON,
+                seed = 1,
+            ),
+        )
+        // Mode (tie -> smallest natural code, black C1): a real bead, not the gray.
+        assertEquals("C1", project.grid[0, 0])
+        // The reference image still averages black+white to a light midtone.
+        val r = (project.referenceGrid!!.toImage().argb(0, 0) shr 16) and 0xFF
+        assertTrue("reference average ~188, was $r", r in 186..190)
+    }
+
+    @Test
+    fun `photo boundary cell averages rather than takes the mode`() {
+        val image = PixelImage(2, 1, intArrayOf(0xFF000000.toInt(), 0xFFFFFFFF.toInt()))
+        val project = PatternGenerator().generate(
+            image,
+            GenerateConfig(
+                gridWidth = 1,
+                gridHeight = 1,
+                palette = TestPalettes.basic(),
+                colorCountTarget = 2,
+                colorCountAuto = true,
+                imageType = ImageType.PHOTO,
+                seed = 1,
+            ),
+        )
+        // Average ~188 is nearer white (C2) than black (C1).
+        assertEquals("C2", project.grid[0, 0])
+    }
+
+    @Test
     fun `reference marks empty holes transparent`() {
         val width = 4
         val height = 2

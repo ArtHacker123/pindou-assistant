@@ -53,4 +53,28 @@ class AreaColorTest {
         val avg = AreaColor.cell(img, 1, 1, 0, 0).rgb
         assertTrue("expected a light midtone, was $avg", avg.r in 186..190 && avg.g in 186..190 && avg.b in 186..190)
     }
+
+    @Test
+    fun `mode representative is a real palette color for a mixed cell`() {
+        val palette = com.pindou.core.TestPalettes.basic() // C1 black, C2 white, ...
+        val lut = PaletteLut.build(palette)
+        val img = PixelImage(2, 1, intArrayOf(0xFF000000.toInt(), 0xFFFFFFFF.toInt()))
+        val sample = AreaColor.cell(img, 1, 1, 0, 0, lut, palette)
+        // Average is still the linear-light midtone (~188) for the reference image.
+        assertTrue("average unchanged, was ${sample.rgb}", sample.rgb.r in 186..190)
+        // Mode snaps to a real bead (tie -> smallest natural code, black C1), never gray.
+        assertEquals(Rgb(0, 0, 0), sample.repRgb)
+    }
+
+    @Test
+    fun `mode representative picks the dominant color`() {
+        val palette = com.pindou.core.TestPalettes.basic()
+        val lut = PaletteLut.build(palette)
+        // Three red-ish pixels, one black: red dominates.
+        val img = PixelImage(4, 1, intArrayOf(
+            0xFFFF0000.toInt(), 0xFF000000.toInt(), 0xFFFF0000.toInt(), 0xFFFF0000.toInt(),
+        ))
+        val sample = AreaColor.cell(img, 1, 1, 0, 0, lut, palette)
+        assertEquals(Rgb(255, 0, 0), sample.repRgb)
+    }
 }

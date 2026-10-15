@@ -230,7 +230,13 @@ class GenerationSession(
                     val t1 = System.currentTimeMillis()
                     val processed = preprocessFor(image, type)
                     val t2 = System.currentTimeMillis()
-                    val reference = reuse ?: references.reference(processed, gw, gh)
+                    // Cartoons reduce each cell to its palette mode, which cannot be
+                    // recovered from an averaged reference, so no reference reuse.
+                    val reference = if (type == ImageType.CARTOON) {
+                        null
+                    } else {
+                        reuse ?: references.reference(processed, gw, gh)
+                    }
                     val t3 = System.currentTimeMillis()
                     val hash = hashFor(image)
                     val t4 = System.currentTimeMillis()

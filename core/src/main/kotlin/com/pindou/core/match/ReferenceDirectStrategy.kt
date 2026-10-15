@@ -1,7 +1,7 @@
 package com.pindou.core.match
 
 import com.pindou.core.color.ColorSpace
-import com.pindou.core.color.LabColorSpace
+import com.pindou.core.color.OklabColorSpace
 import com.pindou.core.imaging.GridSamples
 import com.pindou.core.model.Palette
 import com.pindou.core.model.PaletteItem
@@ -29,7 +29,7 @@ import kotlin.math.pow
  * by natural color-code order, so no seed is needed.
  */
 class ReferenceDirectStrategy(
-    private val space: ColorSpace = LabColorSpace,
+    private val space: ColorSpace = OklabColorSpace,
 ) : ColorStrategy {
 
     override val id = ID
@@ -53,7 +53,7 @@ class ReferenceDirectStrategy(
         val sums = Array(items.size) { DoubleArray(3) }
         for (i in 0 until samples.size) {
             if (!samples.valid[i]) continue
-            val lab = space.encode(samples.avgRgb[i])
+            val lab = space.encode(samples.rep(i))
             val idx = space.nearestIndex(lab, paletteLab)
             if (idx < 0) continue
             counts[idx]++

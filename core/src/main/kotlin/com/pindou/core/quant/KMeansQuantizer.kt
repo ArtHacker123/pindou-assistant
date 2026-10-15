@@ -1,20 +1,20 @@
 package com.pindou.core.quant
 
 import com.pindou.core.color.ColorSpace
-import com.pindou.core.color.LabColorSpace
+import com.pindou.core.color.OklabColorSpace
 import com.pindou.core.model.Rgb
 import kotlin.random.Random
 
 /**
  * K-means color quantization with k-means++ seeding.
  *
- * Clustering runs in a [ColorSpace] (CIELAB by default) so that centroids follow
+ * Clustering runs in a [ColorSpace] (Oklab by default) so that centroids follow
  * perceptual grouping rather than raw sRGB arithmetic. The algorithm is
  * deterministic when a [QuantConfig.seed] is supplied, which lets the app
  * reproduce the exact same pattern for the same input.
  */
 class KMeansQuantizer(
-    private val space: ColorSpace = LabColorSpace,
+    private val space: ColorSpace = OklabColorSpace,
 ) : Quantizer {
 
     override val id: String = ID
