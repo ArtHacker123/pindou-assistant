@@ -282,6 +282,13 @@ fun HomeScreen(controller: PindouController) {
 
         Spacer(Modifier.height(28.dp))
         TipCard()
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            TextButton(onClick = { controller.goAbout() }) { Text("关于与隐私") }
+        }
         Spacer(Modifier.height(8.dp))
     }
 

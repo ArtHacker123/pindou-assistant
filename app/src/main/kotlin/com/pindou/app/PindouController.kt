@@ -41,6 +41,7 @@ sealed interface Screen {
     data object Editor : Screen
     data object Export : Screen
     data object History : Screen
+    data object About : Screen
 }
 
 /**
@@ -245,6 +246,7 @@ class PindouController(private val context: Context) {
     fun goExport() { if (documents.project != null) nav.go(Screen.Export) }
     fun goHome() { nav.go(Screen.Home) }
     fun goHistory() { nav.go(Screen.History) }
+    fun goAbout() { nav.go(Screen.About) }
     fun refreshHistory() = history.refresh()
     fun deleteHistory(entry: PatternEntry) = history.delete(entry)
     fun shareHistory(entry: PatternEntry) = export.shareStoredPindou(entry.uri, entry.displayName)
