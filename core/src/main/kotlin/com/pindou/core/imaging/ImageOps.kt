@@ -52,6 +52,7 @@ object ImageOps {
                     val yy = (y + dy).coerceIn(0, h - 1)
                     for (dx in -radius..radius) {
                         val xx = (x + dx).coerceIn(0, w - 1)
+                        if (!image.valid(xx, yy)) continue
                         val p = image.pixels[yy * w + xx]
                         rs += (p shr 16) and 0xFF
                         gs += (p shr 8) and 0xFF
@@ -59,7 +60,8 @@ object ImageOps {
                         n++
                     }
                 }
-                out[y * w + x] = (0xFF shl 24) or
+                val a = image.pixels[y * w + x] and 0xFF000000.toInt()
+                out[y * w + x] = if (n == 0) a else a or
                     (((rs / n).toInt()) shl 16) or
                     (((gs / n).toInt()) shl 8) or
                     ((bs / n).toInt())

@@ -30,6 +30,17 @@ class ImageOpsTest {
     }
 
     @Test
+    fun `box blur keeps transparent pixels invalid and ignores them when averaging`() {
+        val image = PixelImage(2, 1, intArrayOf(0xFF808080.toInt(), 0x00000000))
+        val blurred = ImageOps.boxBlur(image, radius = 1)
+        // The opaque pixel is not darkened by its transparent neighbour.
+        assertEquals(0xFF808080.toInt(), blurred.argb(0, 0))
+        // The transparent pixel stays transparent (and therefore invalid).
+        assertEquals(0, (blurred.argb(1, 0) ushr 24) and 0xFF)
+        assertTrue(!blurred.valid(1, 0))
+    }
+
+    @Test
     fun `preserves alpha channel`() {
         val image = PixelImage.filled(1, 1, 0x80336699.toInt())
         val out = ImageOps.adjustSaturation(image, 1.4)
