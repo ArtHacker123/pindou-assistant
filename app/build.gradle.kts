@@ -15,6 +15,7 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         vectorDrawables { useSupportLibrary = true }
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     buildTypes {
@@ -59,6 +60,7 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
     implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.0")
 
     testImplementation("junit:junit:4.13.2")
 

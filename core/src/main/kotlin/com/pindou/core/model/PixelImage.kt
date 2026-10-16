@@ -32,6 +32,12 @@ class PixelImage(
 
     fun alpha(x: Int, y: Int): Int = (argb(x, y) ushr 24) and 0xFF
 
+    /**
+     * Returns a copy of this image carrying [mask] as its explicit validity mask
+     * (same pixels), used to attach a subject-cutout mask before the pipeline runs.
+     */
+    fun withMask(mask: BooleanArray?): PixelImage = PixelImage(width, height, pixels, mask)
+
     /** Whether the pixel at (x, y) belongs to the valid/foreground region. */
     fun valid(x: Int, y: Int): Boolean {
         val m = mask

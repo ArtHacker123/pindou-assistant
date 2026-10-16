@@ -16,7 +16,7 @@ object ImageOps {
             (((v - 128) * factor) + 128).roundToInt().coerceIn(0, 255)
         }
         for (i in image.pixels.indices) out[i] = mapRgb(image.pixels[i], table)
-        return PixelImage(image.width, image.height, out)
+        return PixelImage(image.width, image.height, out, image.mask)
     }
 
     fun adjustSaturation(image: PixelImage, factor: Double): PixelImage {
@@ -33,7 +33,7 @@ object ImageOps {
             val nb = (gray + (b - gray) * factor).roundToInt().coerceIn(0, 255)
             out[i] = (p and 0xFF000000.toInt()) or (nr shl 16) or (ng shl 8) or nb
         }
-        return PixelImage(image.width, image.height, out)
+        return PixelImage(image.width, image.height, out, image.mask)
     }
 
     /** Box blur used for light denoising of photos. [radius] >= 1. */
@@ -65,7 +65,7 @@ object ImageOps {
                     ((bs / n).toInt())
             }
         }
-        return PixelImage(w, h, out)
+        return PixelImage(w, h, out, image.mask)
     }
 
     /** Unsharp mask: pushes pixels away from a blurred copy to crisp edges. */
@@ -87,7 +87,7 @@ object ImageOps {
             val nb = (pb + amount * (pb - bb)).roundToInt().coerceIn(0, 255)
             out[i] = (p and 0xFF000000.toInt()) or (nr shl 16) or (ng shl 8) or nb
         }
-        return PixelImage(image.width, image.height, out)
+        return PixelImage(image.width, image.height, out, image.mask)
     }
 
     private fun mapRgb(argb: Int, table: IntArray): Int {

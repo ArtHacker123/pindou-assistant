@@ -57,6 +57,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -88,6 +89,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.pindou.app.PindouController
 import com.pindou.app.R
+import com.pindou.app.ml.CutoutPreset
 import com.pindou.app.state.EditTool
 import com.pindou.app.ui.NameDialog
 import com.pindou.core.imaging.ImageType
@@ -340,6 +342,8 @@ fun EditorScreen(controller: PindouController) {
                         }
                     },
                     onColorCount = { auto, count -> runOrConfirm { controller.updateColorCountSelection(auto, count) } },
+                    onCutout = { enabled -> runOrConfirm { controller.updateCutout(enabled) } },
+                    onCutoutPreset = { preset -> runOrConfirm { controller.updateCutoutPreset(preset) } },
                 )
             }
 
@@ -965,6 +969,8 @@ private fun ParamsPanel(
     onColorStrategy: (String) -> Unit,
     onSize: (Int) -> Unit,
     onColorCount: (Boolean, Int) -> Unit,
+    onCutout: (Boolean) -> Unit,
+    onCutoutPreset: (CutoutPreset) -> Unit,
 ) {
     val hasSource = controller.workingImage != null
     Divider()
@@ -1026,6 +1032,41 @@ private fun ParamsPanel(
                 modifier = Modifier.weight(1f),
                 onSelect = { onColorStrategy(controller.colorStrategies[it].id) },
             )
+        }
+        if (hasSource) {
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("自动抠出主体", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        if (!controller.cutoutAvailable) {
+                            controller.cutoutMessage ?: "当前设备暂不支持该功能"
+                        } else {
+                            "只保留画面主体，背景不参与拼豆；离线在本机处理"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = controller.cutoutEnabled,
+                    enabled = controller.cutoutAvailable && !controller.busy,
+                    onCheckedChange = onCutout,
+                )
+            }
+            if (controller.cutoutEnabled && controller.cutoutAvailable) {
+                Spacer(Modifier.height(4.dp))
+                FieldDropdown(
+                    label = "抠图微调",
+                    selected = controller.cutoutPreset.label,
+                    options = controller.cutoutPresets.map { it.label },
+                    enabled = !controller.busy,
+                    onSelect = { onCutoutPreset(controller.cutoutPresets[it]) },
+                )
+            }
         }
     }
 }

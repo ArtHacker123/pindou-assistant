@@ -11,6 +11,7 @@ import com.pindou.app.data.ExportManager
 import com.pindou.app.data.ImageLoader
 import com.pindou.app.data.PatternEntry
 import com.pindou.app.data.PindouTemplate
+import com.pindou.app.ml.CutoutPreset
 import com.pindou.app.render.Form1BitmapRenderer
 import com.pindou.app.state.DocumentStore
 import com.pindou.app.state.CropPurpose
@@ -90,6 +91,11 @@ class PindouController(private val context: Context) {
     val colorCountTarget: Int get() = generation.colorCountTarget
     val gridWidth: Int get() = generation.gridWidth
     val gridHeight: Int get() = generation.gridHeight
+    val cutoutEnabled: Boolean get() = generation.cutoutEnabled
+    val cutoutAvailable: Boolean get() = generation.cutoutAvailable
+    val cutoutMessage: String? get() = generation.cutoutMessage
+    val cutoutPreset: CutoutPreset get() = generation.cutoutPreset
+    val cutoutPresets: List<CutoutPreset> get() = CutoutPreset.entries
 
     val editMode: Boolean get() = editing.editMode
     val editTool: EditTool get() = editing.tool
@@ -263,6 +269,12 @@ class PindouController(private val context: Context) {
         generation.updateColorCountSelection(isAuto, count)
 
     fun generate() = generation.generate()
+
+    /** Turns the optional subject cutout on/off (runs the device gate on first use). */
+    fun updateCutout(enabled: Boolean) = generation.updateCutout(enabled)
+
+    /** Selects the mask-tuning preset applied to the cutout post-process. */
+    fun updateCutoutPreset(preset: CutoutPreset) = generation.updateCutoutPreset(preset)
 
     // ---- Editing ----------------------------------------------------------
 

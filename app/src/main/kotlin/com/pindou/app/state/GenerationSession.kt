@@ -8,6 +8,9 @@ import androidx.compose.runtime.setValue
 import com.pindou.app.Screen
 import com.pindou.app.data.AssetPaletteProvider
 import com.pindou.app.data.SourceHasher
+import com.pindou.app.ml.CutoutPrefs
+import com.pindou.app.ml.CutoutPreset
+import com.pindou.app.ml.CutoutService
 import com.pindou.core.generate.GenerateConfig
 import com.pindou.core.generate.PatternGenerator
 import com.pindou.core.imaging.ImageType
@@ -29,6 +32,9 @@ import kotlinx.coroutines.withContext
 /** Color count used when the target is "automatic" or otherwise unset. */
 private const val AUTO_COLOR_COUNT = 16
 
+/** Shown when the device fails the cutout model's capability gate. */
+private const val CUTOUT_UNAVAILABLE_MESSAGE = "当前设备运行抠图较慢，已关闭该功能"
+
 /**
  * Holds the generation parameters, the debounced regeneration loop, and the
  * cached grid-resolution reference. Writes its result into the [DocumentStore]
@@ -39,7 +45,7 @@ private const val AUTO_COLOR_COUNT = 16
  * that only affect the color count / palette.
  */
 class GenerationSession(
-    context: Context,
+    private val context: Context,
     private val scope: CoroutineScope,
     private val documents: DocumentStore,
     private val nav: NavigationState,
@@ -51,11 +57,29 @@ class GenerationSession(
     private val TAG = "GenerationSession"
     private val palettes = PaletteRegistry(AssetPaletteProvider(context))
     private val strategies = ColorStrategyRegistry.default()
+    private val cutout = CutoutService(context)
 
     val paletteMetas: List<PaletteMeta> = palettes.available()
 
     /** Color-selection strategies offered to the user. */
     val colorStrategies: List<ColorStrategy> = strategies.all()
+
+    // Subject-cutout: off by default, choice remembered, gated per model/device.
+    var cutoutEnabled by mutableStateOf(CutoutPrefs.enabled(context))
+        private set
+    var cutoutAvailable by mutableStateOf(!CutoutPrefs.unavailable(context))
+        private set
+    var cutoutMessage by mutableStateOf<String?>(null)
+        private set
+    private var cutoutGated = !cutoutAvailable
+
+    /** Mask-tuning preset, remembered across runs; drives the cutout post-process. */
+    var cutoutPreset by mutableStateOf(CutoutPreset.fromId(CutoutPrefs.preset(context)))
+        private set
+
+    init {
+        cutout.options = cutoutPreset.options
+    }
 
     // Generation parameters (two-way bound by the merged parameter/pattern screen).
     var imageType by mutableStateOf(ImageType.CARTOON)
@@ -74,6 +98,7 @@ class GenerationSession(
         val imageType: String,
         val gridWidth: Int,
         val gridHeight: Int,
+        val cutout: Boolean,
     )
     private var referenceKey: ReferenceKey? = null
     private var cachedReference: PixelImage? = null
@@ -90,6 +115,11 @@ class GenerationSession(
     // (a full-image SHA-256) to reuse instead of recomputing on every change.
     private var hashImage: PixelImage? = null
     private var cachedHash: String? = null
+
+    // The cutout mask depends only on the source image, so the masked image is
+    // reused across regenerations instead of re-running the model.
+    private var cutoutSource: PixelImage? = null
+    private var cutoutMasked: PixelImage? = null
 
     fun palette(): Palette? = paletteName?.let { palettes.load(it) }
 
@@ -172,6 +202,56 @@ class GenerationSession(
         if (changed) scheduleRegen()
     }
 
+    /**
+     * Turns the subject cutout on/off. Enabling for the first time runs the
+     * per-model capability gate (a timed warm-up inference); a model over the
+     * 3 s budget is remembered as unavailable and the option is turned back off.
+     */
+    fun updateCutout(enabled: Boolean) {
+        if (cutoutEnabled == enabled) return
+        if (enabled && !cutoutAvailable) return
+        cutoutEnabled = enabled
+        CutoutPrefs.setEnabled(context, enabled)
+        if (!enabled) {
+            scheduleRegen()
+            return
+        }
+        if (cutoutGated) {
+            scheduleRegen()
+            return
+        }
+        scope.launch {
+            nav.markBusy(true)
+            val ms = withContext(Dispatchers.Default) { cutout.measureInferenceMs() }
+            nav.markBusy(false)
+            cutoutGated = true
+            if (ms > CutoutService.BUDGET_MS) {
+                cutoutAvailable = false
+                cutoutEnabled = false
+                CutoutPrefs.setEnabled(context, false)
+                CutoutPrefs.setUnavailable(context, true)
+                cutoutMessage = CUTOUT_UNAVAILABLE_MESSAGE
+            } else {
+                cutoutMessage = null
+                scheduleRegen()
+            }
+        }
+    }
+
+    /**
+     * Selects a mask-tuning preset, remembers it, and invalidates the cached
+     * cutout so the new post-process takes effect on the next generation.
+     */
+    fun updateCutoutPreset(preset: CutoutPreset) {
+        if (cutoutPreset == preset) return
+        cutoutPreset = preset
+        cutout.options = preset.options
+        CutoutPrefs.setPreset(context, preset.id)
+        cutoutSource = null
+        cutoutMasked = null
+        scheduleRegen()
+    }
+
     /** Debounced regeneration: coalesces rapid parameter changes. */
     private fun scheduleRegen() {
         if (documents.workingImage == null) return
@@ -210,6 +290,21 @@ class GenerationSession(
         return value
     }
 
+    /**
+     * Applies the cutout mask to the working image, reusing the result while the
+     * source is unchanged so regenerations do not re-run the model. Returns the
+     * image unchanged when inference fails or overruns its time budget.
+     */
+    private fun cutoutFor(image: PixelImage): PixelImage {
+        if (cutoutSource === image) {
+            cutoutMasked?.let { return it }
+        }
+        val masked = cutout.cutout(image)
+        cutoutSource = image
+        cutoutMasked = masked
+        return masked ?: image
+    }
+
     fun runGenerate() {
         val image = documents.workingImage ?: return
         val palette = palette() ?: return
@@ -226,10 +321,13 @@ class GenerationSession(
             try {
                 val (key, reference, result) = withContext(Dispatchers.Default) {
                     val t0 = System.currentTimeMillis()
-                    val newKey = ReferenceKey(image, type.id, gw, gh)
+                    val cutoutOn = cutoutEnabled && cutoutAvailable
+                    val effective = if (cutoutOn) cutoutFor(image) else image
+                    val tCut = System.currentTimeMillis()
+                    val newKey = ReferenceKey(effective, type.id, gw, gh, cutoutOn)
                     val reuse = if (newKey == referenceKey) cachedReference else null
                     val t1 = System.currentTimeMillis()
-                    val processed = preprocessFor(image, type)
+                    val processed = preprocessFor(effective, type)
                     val t2 = System.currentTimeMillis()
                     // Cartoons reduce each cell to its palette mode, which cannot be
                     // recovered from an averaged reference, so no reference reuse.
@@ -239,7 +337,7 @@ class GenerationSession(
                         reuse ?: references.reference(processed, gw, gh)
                     }
                     val t3 = System.currentTimeMillis()
-                    val hash = hashFor(image)
+                    val hash = hashFor(effective)
                     val t4 = System.currentTimeMillis()
                     val generated = generator.generate(
                         processed,
@@ -258,12 +356,14 @@ class GenerationSession(
                         reference = reference,
                     )
                     val t5 = System.currentTimeMillis()
+                    val (cutPre, cutRun, cutPost) = if (cutoutOn) cutout.lastTimingMs() else Triple(0, 0, 0)
                     Log.i(
                         TAG,
                         "gen seq=$seq img=${image.width}x${image.height} grid=${gw}x${gh} " +
                             "type=${type.id} strat=$strategy reuse=${reuse != null} auto=$auto count=$colorCount " +
-                            "| prepend=${t1 - t0} preprocess=${t2 - t1} reference=${t3 - t2} " +
-                            "hash=${t4 - t3} generate=${t5 - t4} total=${t5 - t0}ms",
+                            "cutout=$cutoutOn | cutout=${tCut - t0} cutPre=$cutPre cutRun=$cutRun cutPost=$cutPost " +
+                            "prepend=${t1 - tCut} preprocess=${t2 - t1} " +
+                            "reference=${t3 - t2} hash=${t4 - t3} generate=${t5 - t4} total=${t5 - t0}ms",
                     )
                     Triple(newKey, reference, generated)
                 }
