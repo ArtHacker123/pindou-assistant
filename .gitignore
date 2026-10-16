@@ -6,6 +6,11 @@
 # Android local config (machine-specific)
 local.properties
 
+# Release signing (machine-specific, never commit)
+keystore.properties
+*.jks
+*.keystore
+
 # IDE
 .idea/
 *.iml
