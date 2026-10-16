@@ -119,6 +119,7 @@ fun EditorScreen(controller: PindouController) {
     var selectedCode by remember(project) { mutableStateOf<String?>(null) }
     var selectedPos by remember(project) { mutableStateOf<Pair<Int, Int>?>(null) }
     var paramsExpanded by remember { mutableStateOf(false) }
+    var advancedExpanded by remember { mutableStateOf(false) }
     var showPattern by remember { mutableStateOf(true) }
     var peeking by remember { mutableStateOf(false) }
     val referenceImage = remember(project) { project?.referenceGrid?.toImage() }
@@ -331,6 +332,8 @@ fun EditorScreen(controller: PindouController) {
             if (paramsExpanded && project != null) {
                 ParamsPanel(
                     controller = controller,
+                    advancedExpanded = advancedExpanded,
+                    onAdvancedToggle = { advancedExpanded = !advancedExpanded },
                     onImageType = { type -> runOrConfirm { controller.updateImageType(type) } },
                     onPalette = { name -> pendingPalette = name },
                     onColorStrategy = { id -> runOrConfirm { controller.updateColorStrategy(id) } },
@@ -964,6 +967,8 @@ private fun HistoryButton(
 @Composable
 private fun ParamsPanel(
     controller: PindouController,
+    advancedExpanded: Boolean,
+    onAdvancedToggle: () -> Unit,
     onImageType: (ImageType) -> Unit,
     onPalette: (String) -> Unit,
     onColorStrategy: (String) -> Unit,
@@ -973,6 +978,15 @@ private fun ParamsPanel(
     onCutoutPreset: (CutoutPreset) -> Unit,
 ) {
     val hasSource = controller.workingImage != null
+    val strategyName = controller.colorStrategies
+        .firstOrNull { it.id == controller.colorStrategy }
+        ?.displayName ?: "参考图直取"
+    val cutoutState = when {
+        !controller.cutoutAvailable -> "抠图不可用"
+        controller.cutoutEnabled -> "抠图 开"
+        else -> "抠图 关"
+    }
+    val advancedSummary = if (hasSource) "$strategyName · $cutoutState" else strategyName
     Divider()
     Column(
         modifier = Modifier
@@ -1021,51 +1035,77 @@ private fun ParamsPanel(
                 },
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            FieldDropdown(
-                label = "取色方式",
-                selected = controller.colorStrategies
-                    .firstOrNull { it.id == controller.colorStrategy }
-                    ?.displayName ?: "参考图直取",
-                options = controller.colorStrategies.map { it.displayName },
-                enabled = hasSource && !controller.busy,
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onAdvancedToggle)
+                .padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("高级", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                advancedSummary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.End,
                 modifier = Modifier.weight(1f),
-                onSelect = { onColorStrategy(controller.colorStrategies[it].id) },
+            )
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                imageVector = if (advancedExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                contentDescription = if (advancedExpanded) "收起高级设置" else "展开高级设置",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
             )
         }
-        if (hasSource) {
-            Spacer(Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("自动抠出主体", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        if (!controller.cutoutAvailable) {
-                            controller.cutoutMessage ?: "当前设备暂不支持该功能"
-                        } else {
-                            "只保留画面主体，背景不参与拼豆；离线在本机处理"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = controller.cutoutEnabled,
-                    enabled = controller.cutoutAvailable && !controller.busy,
-                    onCheckedChange = onCutout,
+        if (advancedExpanded) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FieldDropdown(
+                    label = "取色方式",
+                    selected = strategyName,
+                    options = controller.colorStrategies.map { it.displayName },
+                    enabled = hasSource && !controller.busy,
+                    modifier = Modifier.weight(1f),
+                    onSelect = { onColorStrategy(controller.colorStrategies[it].id) },
                 )
             }
-            if (controller.cutoutEnabled && controller.cutoutAvailable) {
+            if (hasSource) {
                 Spacer(Modifier.height(4.dp))
-                FieldDropdown(
-                    label = "抠图微调",
-                    selected = controller.cutoutPreset.label,
-                    options = controller.cutoutPresets.map { it.label },
-                    enabled = !controller.busy,
-                    onSelect = { onCutoutPreset(controller.cutoutPresets[it]) },
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("自动抠出主体", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            if (!controller.cutoutAvailable) {
+                                controller.cutoutMessage ?: "当前设备暂不支持该功能"
+                            } else {
+                                "只保留画面主体，背景不参与拼豆；离线在本机处理"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = controller.cutoutEnabled,
+                        enabled = controller.cutoutAvailable && !controller.busy,
+                        onCheckedChange = onCutout,
+                    )
+                }
+                if (controller.cutoutEnabled && controller.cutoutAvailable) {
+                    Spacer(Modifier.height(4.dp))
+                    FieldDropdown(
+                        label = "抠图微调",
+                        selected = controller.cutoutPreset.label,
+                        options = controller.cutoutPresets.map { it.label },
+                        enabled = !controller.busy,
+                        onSelect = { onCutoutPreset(controller.cutoutPresets[it]) },
+                    )
+                }
             }
         }
     }
