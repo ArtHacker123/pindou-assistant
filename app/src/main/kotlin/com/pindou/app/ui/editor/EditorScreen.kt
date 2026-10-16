@@ -329,27 +329,6 @@ fun EditorScreen(controller: PindouController) {
                 }
             }
 
-            if (paramsExpanded && project != null) {
-                ParamsPanel(
-                    controller = controller,
-                    advancedExpanded = advancedExpanded,
-                    onAdvancedToggle = { advancedExpanded = !advancedExpanded },
-                    onImageType = { type -> runOrConfirm { controller.updateImageType(type) } },
-                    onPalette = { name -> pendingPalette = name },
-                    onColorStrategy = { id -> runOrConfirm { controller.updateColorStrategy(id) } },
-                    onSize = { size ->
-                        if (controller.hasSource && !controller.edited) {
-                            controller.resizeGridRegenerate(size)
-                        } else {
-                            pendingSize = size
-                        }
-                    },
-                    onColorCount = { auto, count -> runOrConfirm { controller.updateColorCountSelection(auto, count) } },
-                    onCutout = { enabled -> runOrConfirm { controller.updateCutout(enabled) } },
-                    onCutoutPreset = { preset -> runOrConfirm { controller.updateCutoutPreset(preset) } },
-                )
-            }
-
             if (editMode && project != null) {
                 EditActionBar(
                     controller = controller,
@@ -406,6 +385,7 @@ fun EditorScreen(controller: PindouController) {
                         onEditCursor = { row, col, active ->
                             if (active) controller.updateEditCursor(row, col) else controller.clearEditCursor()
                         },
+                        onInteract = { paramsExpanded = false },
                     )
                 } else {
                     Box(
@@ -472,6 +452,59 @@ fun EditorScreen(controller: PindouController) {
                             .onSizeChanged { peekSize = it }
                             .alpha(if (peekSize == IntSize.Zero) 0f else 1f),
                     )
+                }
+
+                // The settings panel floats over the top of the canvas so opening
+                // or collapsing it never resizes the canvas (no reflow under the
+                // user's finger mid-gesture).
+                if (paramsExpanded && project != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .fillMaxWidth(),
+                    ) {
+                        // Consume touches on the panel so a tap here never falls
+                        // through and edits a cell on the grid underneath.
+                        Box(
+                            Modifier
+                                .matchParentSize()
+                                .pointerInput(Unit) {
+                                    awaitEachGesture {
+                                        val down = awaitFirstDown(requireUnconsumed = false)
+                                        down.consume()
+                                        while (true) {
+                                            val event = awaitPointerEvent()
+                                            if (event.changes.none { it.pressed }) break
+                                            event.changes.forEach { it.consume() }
+                                        }
+                                    }
+                                },
+                        )
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface,
+                            shadowElevation = 6.dp,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            ParamsPanel(
+                                controller = controller,
+                                advancedExpanded = advancedExpanded,
+                                onAdvancedToggle = { advancedExpanded = !advancedExpanded },
+                                onImageType = { type -> runOrConfirm { controller.updateImageType(type) } },
+                                onPalette = { name -> pendingPalette = name },
+                                onColorStrategy = { id -> runOrConfirm { controller.updateColorStrategy(id) } },
+                                onSize = { size ->
+                                    if (controller.hasSource && !controller.edited) {
+                                        controller.resizeGridRegenerate(size)
+                                    } else {
+                                        pendingSize = size
+                                    }
+                                },
+                                onColorCount = { auto, count -> runOrConfirm { controller.updateColorCountSelection(auto, count) } },
+                                onCutout = { enabled -> runOrConfirm { controller.updateCutout(enabled) } },
+                                onCutoutPreset = { preset -> runOrConfirm { controller.updateCutoutPreset(preset) } },
+                            )
+                        }
+                    }
                 }
             }
 
@@ -987,7 +1020,6 @@ private fun ParamsPanel(
         else -> "抠图 关"
     }
     val advancedSummary = if (hasSource) "$strategyName · $cutoutState" else strategyName
-    Divider()
     Column(
         modifier = Modifier
             .fillMaxWidth()

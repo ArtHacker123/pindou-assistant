@@ -86,6 +86,7 @@ fun PatternGrid(
     onEditEnd: () -> Unit = {},
     highlightCell: Pair<Int, Int>? = null,
     onEditCursor: (row: Int, col: Int, active: Boolean) -> Unit = { _, _, _ -> },
+    onInteract: () -> Unit = {},
 ) {
     val grid = project.grid
     val colorByCode = remember(project) {
@@ -201,6 +202,10 @@ fun PatternGrid(
                         }
                         return@awaitEachGesture
                     }
+
+                    // A plain canvas gesture (tap, draw, pan, zoom) — not an
+                    // overlay touch. Let the host react (e.g. collapse settings).
+                    onInteract()
 
                     // Whether this gesture may edit cells at all (edit mode, not
                     // the move tool). `drawing` flips on only after the gesture is
