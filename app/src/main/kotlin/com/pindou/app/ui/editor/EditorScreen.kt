@@ -62,6 +62,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -117,8 +118,18 @@ fun EditorScreen(controller: PindouController) {
     val grid = project?.grid
     val editMode = controller.editMode
 
-    var selectedCode by remember(project) { mutableStateOf<String?>(null) }
-    var selectedPos by remember(project) { mutableStateOf<Pair<Int, Int>?>(null) }
+    // Unkeyed on purpose: PatternGrid's gesture pointerInput only restarts when
+    // its own keys change, so a keyed state would be replaced by a new instance
+    // after a regeneration while the old tap lambda still holds the dead one
+    // (taps would write into it and highlight would never appear). A stable
+    // instance plus an explicit clear keeps stale closures writing to the live
+    // state; a new project also means a new grid, so the old selection resets.
+    var selectedCode by remember { mutableStateOf<String?>(null) }
+    var selectedPos by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    LaunchedEffect(project) {
+        selectedCode = null
+        selectedPos = null
+    }
     var paramsExpanded by remember { mutableStateOf(false) }
     var advancedExpanded by remember { mutableStateOf(false) }
     var showPattern by remember { mutableStateOf(true) }
@@ -349,13 +360,19 @@ fun EditorScreen(controller: PindouController) {
                     .onSizeChanged { canvasSize = it },
             ) {
                 if (project != null) {
-                    val g = project.grid
                     PatternGrid(
                         project = project,
                         selectedCode = if (editMode) null else selectedCode,
                         selectedPos = if (editMode) null else selectedPos,
                         onCellTap = { row, col ->
-                            if (row in 0 until g.height && col in 0 until g.width) {
+                            // Read the grid through the controller at tap time,
+                            // not via the captured `project`: PatternGrid's
+                            // gesture pointerInput does not restart when only the
+                            // project is replaced, so a captured grid would go
+                            // stale after a regeneration and report codes that no
+                            // longer exist in the pattern.
+                            val g = controller.project?.grid
+                            if (g != null && row in 0 until g.height && col in 0 until g.width) {
                                 val code = g[row, col]
                                 if (code != null) {
                                     if (selectedCode != null && code == selectedCode) {
