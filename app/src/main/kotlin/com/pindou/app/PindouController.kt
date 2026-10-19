@@ -22,6 +22,7 @@ import com.pindou.app.state.GenerationSession
 import com.pindou.app.state.HistorySession
 import com.pindou.app.state.NavigationState
 import com.pindou.app.state.ReferenceService
+import com.pindou.core.generate.DenoiseStrength
 import com.pindou.core.imaging.ImageType
 import com.pindou.core.match.PaletteMapper
 import com.pindou.core.model.Grid
@@ -96,6 +97,8 @@ class PindouController(private val context: Context) {
     val cutoutMessage: String? get() = generation.cutoutMessage
     val cutoutPreset: CutoutPreset get() = generation.cutoutPreset
     val cutoutPresets: List<CutoutPreset> get() = CutoutPreset.entries
+    val denoiseEnabled: Boolean get() = generation.denoiseEnabled
+    val denoiseStrength: DenoiseStrength get() = generation.denoiseStrength
 
     val editMode: Boolean get() = editing.editMode
     val editTool: EditTool get() = editing.tool
@@ -275,6 +278,12 @@ class PindouController(private val context: Context) {
 
     /** Selects the mask-tuning preset applied to the cutout post-process. */
     fun updateCutoutPreset(preset: CutoutPreset) = generation.updateCutoutPreset(preset)
+
+    /** Turns the post-generation denoise pass on/off. */
+    fun updateDenoise(enabled: Boolean) = generation.updateDenoise(enabled)
+
+    /** Selects the denoise strength (used only while denoise is on). */
+    fun updateDenoiseStrength(strength: DenoiseStrength) = generation.updateDenoiseStrength(strength)
 
     // ---- Editing ----------------------------------------------------------
 

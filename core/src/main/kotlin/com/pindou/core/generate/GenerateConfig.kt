@@ -16,6 +16,8 @@ data class GenerateConfig(
     /** Whether the color count is "automatic" (uncapped for reference-direct). */
     val colorCountAuto: Boolean = false,
     val quantizerId: String = "kmeans",
+    /** Speckle-removal strength applied after snapping; [DenoiseStrength.OFF] disables it. */
+    val denoiseStrength: DenoiseStrength = DenoiseStrength.MEDIUM,
     /** When set, generation is reproducible. Usually derived from the source hash. */
     val seed: Long? = null,
     val maxSamples: Int = 8000,

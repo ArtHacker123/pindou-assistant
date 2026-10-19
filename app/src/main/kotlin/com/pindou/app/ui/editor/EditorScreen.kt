@@ -92,6 +92,7 @@ import com.pindou.app.R
 import com.pindou.app.ml.CutoutPreset
 import com.pindou.app.state.EditTool
 import com.pindou.app.ui.NameDialog
+import com.pindou.core.generate.DenoiseStrength
 import com.pindou.core.imaging.ImageType
 import com.pindou.core.model.PindouProject
 import kotlinx.coroutines.launch
@@ -502,6 +503,8 @@ fun EditorScreen(controller: PindouController) {
                                 onColorCount = { auto, count -> runOrConfirm { controller.updateColorCountSelection(auto, count) } },
                                 onCutout = { enabled -> runOrConfirm { controller.updateCutout(enabled) } },
                                 onCutoutPreset = { preset -> runOrConfirm { controller.updateCutoutPreset(preset) } },
+                                onDenoise = { enabled -> runOrConfirm { controller.updateDenoise(enabled) } },
+                                onDenoiseStrength = { strength -> runOrConfirm { controller.updateDenoiseStrength(strength) } },
                             )
                         }
                     }
@@ -1009,6 +1012,8 @@ private fun ParamsPanel(
     onColorCount: (Boolean, Int) -> Unit,
     onCutout: (Boolean) -> Unit,
     onCutoutPreset: (CutoutPreset) -> Unit,
+    onDenoise: (Boolean) -> Unit,
+    onDenoiseStrength: (DenoiseStrength) -> Unit,
 ) {
     val hasSource = controller.workingImage != null
     val strategyName = controller.colorStrategies
@@ -1019,7 +1024,16 @@ private fun ParamsPanel(
         controller.cutoutEnabled -> "抠图 开"
         else -> "抠图 关"
     }
-    val advancedSummary = if (hasSource) "$strategyName · $cutoutState" else strategyName
+    val denoiseState = if (controller.denoiseEnabled) {
+        "去杂色 ${controller.denoiseStrength.displayName}"
+    } else {
+        "去杂色 关"
+    }
+    val advancedSummary = if (hasSource) {
+        "$strategyName · $cutoutState · $denoiseState"
+    } else {
+        "$strategyName · $denoiseState"
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1138,6 +1152,35 @@ private fun ParamsPanel(
                         onSelect = { onCutoutPreset(controller.cutoutPresets[it]) },
                     )
                 }
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("去杂色", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "合并照片图纸上零散的近似色号，眼睛、描边等对比强的细节不受影响",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = controller.denoiseEnabled,
+                    enabled = !controller.busy,
+                    onCheckedChange = onDenoise,
+                )
+            }
+            if (controller.denoiseEnabled) {
+                Spacer(Modifier.height(4.dp))
+                FieldDropdown(
+                    label = "去杂色强度",
+                    selected = controller.denoiseStrength.displayName,
+                    options = DenoiseStrength.SELECTABLE.map { it.displayName },
+                    enabled = !controller.busy,
+                    onSelect = { onDenoiseStrength(DenoiseStrength.SELECTABLE[it]) },
+                )
             }
         }
     }

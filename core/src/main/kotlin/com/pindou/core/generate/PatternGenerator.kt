@@ -32,6 +32,8 @@ class PatternGenerator(
     private val space: ColorSpace = OklabColorSpace,
 ) {
 
+    private val refiner = GridRefiner(space)
+
     /**
      * Turns the already-preprocessed [image] into a [PindouProject].
      *
@@ -91,7 +93,21 @@ class PatternGenerator(
             cells.add(if (idx >= 0) usedBeads[idx].code else config.palette.items.first().code)
         }
 
-        val grid = Grid(config.gridWidth, config.gridHeight, cells)
+        // Remove speckle after snapping: only the emitted grid changes, never the
+        // reference. Skipped entirely when denoise is off.
+        val cleaned = if (config.denoiseStrength == DenoiseStrength.OFF) {
+            cells
+        } else {
+            refiner.refine(
+                cells = cells,
+                width = config.gridWidth,
+                height = config.gridHeight,
+                paletteByCode = config.palette.items.associate { it.code to it.rgb },
+                strength = config.denoiseStrength,
+            )
+        }
+
+        val grid = Grid(config.gridWidth, config.gridHeight, cleaned)
         val usedItems = grid.distinctCodes()
             .mapNotNull { config.palette.item(it) }
             .sortedNaturallyBy { it.code }

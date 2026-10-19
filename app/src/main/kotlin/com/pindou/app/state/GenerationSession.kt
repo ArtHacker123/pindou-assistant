@@ -11,6 +11,7 @@ import com.pindou.app.data.SourceHasher
 import com.pindou.app.ml.CutoutPrefs
 import com.pindou.app.ml.CutoutPreset
 import com.pindou.app.ml.CutoutService
+import com.pindou.core.generate.DenoiseStrength
 import com.pindou.core.generate.GenerateConfig
 import com.pindou.core.generate.PatternGenerator
 import com.pindou.core.imaging.ImageType
@@ -75,6 +76,13 @@ class GenerationSession(
 
     /** Mask-tuning preset, remembered across runs; drives the cutout post-process. */
     var cutoutPreset by mutableStateOf(CutoutPreset.fromId(CutoutPrefs.preset(context)))
+        private set
+
+    // Denoise: on at medium by default, choice remembered. A generation-time
+    // parameter only — never written into a `.pindou` document.
+    var denoiseEnabled by mutableStateOf(DenoisePrefs.enabled(context))
+        private set
+    var denoiseStrength by mutableStateOf(DenoisePrefs.strength(context))
         private set
 
     init {
@@ -202,6 +210,22 @@ class GenerationSession(
         if (changed) scheduleRegen()
     }
 
+    /** Turns the denoise switch on/off and remembers the choice. */
+    fun updateDenoise(enabled: Boolean) {
+        if (denoiseEnabled == enabled) return
+        denoiseEnabled = enabled
+        DenoisePrefs.setEnabled(context, enabled)
+        scheduleRegen()
+    }
+
+    /** Selects a denoise strength and remembers it; strength is only used while denoise is on. */
+    fun updateDenoiseStrength(strength: DenoiseStrength) {
+        if (denoiseStrength == strength) return
+        denoiseStrength = strength
+        DenoisePrefs.setStrength(context, strength)
+        scheduleRegen()
+    }
+
     /**
      * Turns the subject cutout on/off. Enabling for the first time runs the
      * per-model capability gate (a timed warm-up inference); a model over the
@@ -317,6 +341,7 @@ class GenerationSession(
         val gw = gridWidth
         val gh = gridHeight
         val colorCount = colorCountTarget.coerceAtLeast(1)
+        val denoise = if (denoiseEnabled) denoiseStrength else DenoiseStrength.OFF
         scope.launch {
             try {
                 val (key, reference, result) = withContext(Dispatchers.Default) {
@@ -349,6 +374,7 @@ class GenerationSession(
                             colorStrategy = strategy,
                             colorCountAuto = auto,
                             imageType = type,
+                            denoiseStrength = denoise,
                             seed = hash.hashCode().toLong(),
                             createdAt = System.currentTimeMillis(),
                             sourceHash = hash,
