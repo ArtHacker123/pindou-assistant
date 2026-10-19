@@ -47,6 +47,13 @@ class EditingSession(
     var brushCode by mutableStateOf<String?>(null)
         private set
 
+    /**
+     * Whether the canvas outlines every cell matching the brush color. A pure
+     * render overlay (no gesture impact); session-scoped, default on.
+     */
+    var brushHighlight by mutableStateOf(true)
+        private set
+
     /** The cell currently under the finger in edit mode, for the cursor highlight. */
     var cursor by mutableStateOf<Pair<Int, Int>?>(null)
         private set
@@ -86,6 +93,11 @@ class EditingSession(
     /** Toggles the eraser between single-cell and region erase. */
     fun toggleEraseConnected() {
         eraseConnected = !eraseConnected
+    }
+
+    /** Toggles the brush-linked same-color highlight on the canvas. */
+    fun toggleBrushHighlight() {
+        brushHighlight = !brushHighlight
     }
 
     fun selectBrush(code: String?) {

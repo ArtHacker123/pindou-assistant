@@ -107,6 +107,9 @@ class PindouController(private val context: Context) {
     /** Whether the eraser is in region-erase mode. */
     val eraseConnected: Boolean get() = editing.eraseConnected
 
+    /** Whether the canvas outlines every cell matching the brush color (edit mode). */
+    val brushHighlight: Boolean get() = editing.brushHighlight
+
     /** The label for the active tool, reflecting the eraser's region-erase mode. */
     val editToolLabel: String
         get() = if (editing.tool == EditTool.ERASE && editing.eraseConnected) {
@@ -299,6 +302,9 @@ class PindouController(private val context: Context) {
 
     /** Toggles the eraser between single-cell and region erase. */
     fun toggleEraseConnected() = editing.toggleEraseConnected()
+
+    /** Toggles the brush-linked same-color highlight on the edit canvas. */
+    fun toggleBrushHighlight() = editing.toggleBrushHighlight()
 
     /** Discards all unsaved changes, reverting the project to the last committed state. */
     fun discardEdits() {

@@ -61,7 +61,12 @@ private fun DrawScope.drawEmptyCell(x: Float, y: Float, cell: Float) {
  * cells (viewport culling), with a thick guide every 10 cells and a finer
  * guide every 5 cells. When [selectedCode] is set, cells of that code get an
  * inset accent outline while cells of other codes get dimmed by a black
- * spotlight veil.
+ * spotlight veil — unless [dimUnselected] is false, in which case no veil is
+ * drawn, the matching cells get a translucent accent wash under a thicker
+ * outline in the code-label ink color (black on light beads, white on dark
+ * ones) so they read on any bead color, and the rest of the pattern stays
+ * fully visible (the edit mode brush-linked highlight needs this so drawing
+ * is not obscured).
  *
  * [showReference] paints the grid-resolution [reference] as a base layer under
  * every cell (empty holes stay transparent); [showPattern] then paints the bead
@@ -87,6 +92,7 @@ fun PatternGrid(
     highlightCell: Pair<Int, Int>? = null,
     onEditCursor: (row: Int, col: Int, active: Boolean) -> Unit = { _, _, _ -> },
     onInteract: () -> Unit = {},
+    dimUnselected: Boolean = true,
 ) {
     val grid = project.grid
     val colorByCode = remember(project) {
@@ -475,16 +481,38 @@ fun PatternGrid(
                 )
                 if (selectedCode != null) {
                     if (code != selectedCode) {
-                        drawRect(
-                            color = SPOTLIGHT_DIM,
-                            topLeft = Offset(x, y),
-                            size = Size(cell, cell),
-                        )
+                        if (dimUnselected) {
+                            drawRect(
+                                color = SPOTLIGHT_DIM,
+                                topLeft = Offset(x, y),
+                                size = Size(cell, cell),
+                            )
+                        }
                     } else {
                         val inset = cell * 0.08f
-                        val stroke = (cell * 0.04f).coerceIn(1.5f, 3f)
+                        if (!dimUnselected) {
+                            // Edit mode highlight: a translucent accent wash under
+                            // the outline so marked cells read on any bead color.
+                            drawRect(
+                                color = SELECT_ACCENT.copy(alpha = 0.2f),
+                                topLeft = Offset(x, y),
+                                size = Size(cell, cell),
+                            )
+                        }
+                        val stroke = if (dimUnselected) {
+                            (cell * 0.04f).coerceIn(1.5f, 3f)
+                        } else {
+                            (cell * 0.07f).coerceIn(2.5f, 4.5f)
+                        }
                         drawRect(
-                            color = SELECT_ACCENT,
+                            // Edit mode uses the code-label ink (black on light
+                            // beads, white on dark ones) so the outline always
+                            // contrasts with the bead it sits on.
+                            color = if (dimUnselected) {
+                                SELECT_ACCENT
+                            } else {
+                                inkByCode[code] ?: Color.Black
+                            },
                             topLeft = Offset(x + inset, y + inset),
                             size = Size(cell - inset * 2, cell - inset * 2),
                             style = Stroke(width = stroke),

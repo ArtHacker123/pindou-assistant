@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Colorize
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FindReplace
 import androidx.compose.material.icons.filled.FormatColorFill
+import androidx.compose.material.icons.filled.Highlight
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.PanTool
@@ -115,7 +116,6 @@ private val SWATCH_ROW_HEIGHT = 60.dp
 @Composable
 fun EditorScreen(controller: PindouController) {
     val project = controller.project
-    val grid = project?.grid
     val editMode = controller.editMode
 
     // Unkeyed on purpose: PatternGrid's gesture pointerInput only restarts when
@@ -362,7 +362,10 @@ fun EditorScreen(controller: PindouController) {
                 if (project != null) {
                     PatternGrid(
                         project = project,
-                        selectedCode = if (editMode) null else selectedCode,
+                        selectedCode = when {
+                            editMode -> if (controller.brushHighlight) controller.brushCode else null
+                            else -> selectedCode
+                        },
                         selectedPos = if (editMode) null else selectedPos,
                         onCellTap = { row, col ->
                             // Read the grid through the controller at tap time,
@@ -404,6 +407,7 @@ fun EditorScreen(controller: PindouController) {
                             if (active) controller.updateEditCursor(row, col) else controller.clearEditCursor()
                         },
                         onInteract = { paramsExpanded = false },
+                        dimUnselected = !editMode,
                     )
                 } else {
                     Box(
@@ -436,11 +440,13 @@ fun EditorScreen(controller: PindouController) {
                     FloatingToolbar(
                         selected = controller.editTool,
                         eraseConnected = controller.eraseConnected,
+                        brushHighlight = controller.brushHighlight,
                         onSelect = controller::selectEditTool,
                         onToggleEraseConnected = {
                             controller.selectEditTool(EditTool.ERASE)
                             controller.toggleEraseConnected()
                         },
+                        onToggleBrushHighlight = controller::toggleBrushHighlight,
                         canUndo = controller.canUndo,
                         canRedo = controller.canRedo,
                         onUndo = { controller.undoEdit() },
@@ -538,7 +544,9 @@ fun EditorScreen(controller: PindouController) {
                     selectedCode = selectedCode,
                     selectedPos = selectedPos,
                     name = selectedCode?.let { itemByCode[it]?.name },
-                    sameColorCount = selectedCode?.let { counts[it] } ?: 0,
+                    sameColorCount = selectedCode?.let { counts[it] }
+                        ?: controller.brushCode?.let { counts[it] }
+                        ?: 0,
                 )
                 ColorTablePanel(
                     project = project,
@@ -871,8 +879,10 @@ private fun EditActionBar(
 private fun FloatingToolbar(
     selected: EditTool,
     eraseConnected: Boolean,
+    brushHighlight: Boolean,
     onSelect: (EditTool) -> Unit,
     onToggleEraseConnected: () -> Unit,
+    onToggleBrushHighlight: () -> Unit,
     canUndo: Boolean,
     canRedo: Boolean,
     onUndo: () -> Unit,
@@ -926,6 +936,7 @@ private fun FloatingToolbar(
                         .background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50)),
                 )
             }
+            ToggleIconButton(Icons.Filled.Highlight, "同色高亮", selected = brushHighlight, onClick = onToggleBrushHighlight)
             ToolButton(EditTool.MOVE, selected == EditTool.MOVE) { onSelect(EditTool.MOVE) }
             HistoryButton(Icons.Filled.Undo, "撤销", canUndo, onUndo)
             HistoryButton(Icons.Filled.Redo, "重做", canRedo, onRedo)
@@ -1013,6 +1024,38 @@ private fun HistoryButton(
             contentDescription = label,
             modifier = Modifier.size(20.dp),
             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.38f),
+        )
+    }
+}
+
+/** A toggle-style dock button (selected-state background like [ToolButton], always clickable). */
+@Composable
+private fun ToggleIconButton(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(50))
+            .background(
+                if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                RoundedCornerShape(50),
+            )
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = label,
+            modifier = Modifier.size(20.dp),
+            tint = if (selected) {
+                MaterialTheme.colorScheme.onSecondaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
         )
     }
 }
@@ -1273,6 +1316,9 @@ private fun InfoBar(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                 )
+                if (brushCode != null) {
+                    Text("同色 $sameColorCount 粒", style = MaterialTheme.typography.bodyMedium)
+                }
             } else if (selectedCode == null) {
                 Text("点击格子查看色号与坐标，点高亮格可取消选择", style = MaterialTheme.typography.bodyMedium)
             } else {
