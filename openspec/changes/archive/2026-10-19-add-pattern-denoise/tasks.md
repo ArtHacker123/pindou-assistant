@@ -26,4 +26,4 @@
 ## 6. Verify
 
 - [x] 6.1 `:core:test :app:assembleDebug` (and `npx openspec validate add-pattern-denoise --strict`) pass.
-- [ ] 6.2 Build and install the APK, then let the user verify on a photo that speckle is reduced and eyes/outlines survive across the three strengths; only commit/archive after the user confirms.
+- [x] 6.2 Build and install the APK, then let the user verify on a photo that speckle is reduced and eyes/outlines survive across the three strengths; only commit/archive after the user confirms.
